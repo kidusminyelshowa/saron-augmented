@@ -1,0 +1,22 @@
+{
+  "name": "saron-augmented",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.4",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0"
+  },
+  "dependencies": {
+    "mind-ar": "^1.2.5",
+    "three": "^0.152.2"
+  }
+}

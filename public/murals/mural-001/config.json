@@ -1,0 +1,61 @@
+{
+  "id": "mural-001",
+  "name": "Alliance Mural",
+  "target": "allience.mind",
+  "layers": [
+    {
+      "id": "layer-01-background",
+      "src": "background_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "opacity": 1,
+      "loop": true
+    },
+    {
+      "id": "layer-02-logs",
+      "src": "logs_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "opacity": 1,
+      "loop": true
+    },
+    {
+      "id": "layer-03-woman",
+      "src": "woman_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "opacity": 1,
+      "loop": true
+    },
+    {
+      "id": "layer-04-ensira",
+      "src": "ensira_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "opacity": 1,
+      "loop": true
+    },
+    {
+      "id": "layer-05-water",
+      "src": "water_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "opacity": 1,
+      "loop": true
+    },
+    {
+      "id": "layer-06-hand",
+      "src": "hand_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "opacity": 1,
+      "loop": true
+    }
+  ]
+}

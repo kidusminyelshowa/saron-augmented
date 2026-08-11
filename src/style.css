@@ -1,0 +1,209 @@
+/**
+ * Mural WebAR — Styles
+ *
+ * Full-viewport AR experience with mobile-optimized typography,
+ * non-blocking scanning HUD, and glassmorphism error/loading modals.
+ */
+
+/* --- Google Fonts --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+/* --- Reset & Base --- */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #000;
+  color: #fff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* --- AR Container --- */
+#ar-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  z-index: 0;
+}
+
+#ar-container canvas {
+  pointer-events: none;
+}
+
+/* --- Overlay Base --- */
+.ar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.ar-overlay--visible {
+  opacity: 1;
+}
+
+/* --- Fullscreen Modals (Loading, Camera Denied, Unsupported, Tap to Start) --- */
+.ar-overlay--loading,
+.ar-overlay--tap-to-start,
+.ar-overlay--camera-denied,
+.ar-overlay--unsupported {
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  pointer-events: auto;
+}
+
+/* --- Content Card / HUD Pill --- */
+.ar-overlay__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem 2rem;
+  max-width: 20rem;
+  text-align: center;
+  border-radius: 1.5rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ar-overlay--loading .ar-overlay__content,
+.ar-overlay--tap-to-start .ar-overlay__content,
+.ar-overlay--camera-denied .ar-overlay__content,
+.ar-overlay--unsupported .ar-overlay__content {
+  padding: 2.25rem 2rem;
+  max-width: 22rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* --- Non-blocking HUD Toast for Scanning & Tracking-Lost --- */
+.ar-overlay--scanning,
+.ar-overlay--tracking-lost {
+  align-items: flex-end;
+  padding-bottom: 3.5rem;
+}
+
+.ar-overlay--scanning .ar-overlay__content,
+.ar-overlay--tracking-lost .ar-overlay__content {
+  background: rgba(10, 15, 25, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  border-radius: 2rem;
+  animation: ar-float 3s ease-in-out infinite;
+}
+
+@keyframes ar-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.ar-overlay__title {
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.ar-overlay__subtitle {
+  font-size: 0.8125rem;
+  font-weight: 300;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* --- Spinner --- */
+.ar-overlay__spinner {
+  width: 2rem;
+  height: 2rem;
+}
+
+.ar-overlay__spinner-svg {
+  width: 100%;
+  height: 100%;
+  animation: ar-spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.ar-overlay__spinner-svg circle {
+  stroke-dasharray: 90, 150;
+  stroke-dashoffset: 0;
+  animation: ar-dash 1.5s ease-in-out infinite;
+}
+
+@keyframes ar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ar-dash {
+  0% {
+    stroke-dasharray: 1, 150;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -35;
+  }
+  100% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -124;
+  }
+}
+
+/* --- State-specific styling --- */
+.ar-overlay--camera-denied .ar-overlay__content,
+.ar-overlay--unsupported .ar-overlay__content {
+  border-color: rgba(255, 80, 80, 0.3);
+  background: rgba(40, 10, 10, 0.85);
+}
+
+.ar-overlay--camera-denied .ar-overlay__title,
+.ar-overlay--unsupported .ar-overlay__title {
+  color: rgba(255, 140, 140, 0.95);
+}
+
+.ar-overlay--tracking-lost .ar-overlay__content {
+  border-color: rgba(255, 200, 60, 0.3);
+  background: rgba(30, 25, 10, 0.8);
+}
+
+.ar-overlay--tracking-lost .ar-overlay__title {
+  color: rgba(255, 225, 140, 0.95);
+}
+
+.ar-overlay--scanning .ar-overlay__content {
+  border-color: rgba(100, 200, 255, 0.35);
+}
+
+.ar-overlay--scanning .ar-overlay__spinner-svg {
+  color: #38bdf8;
+}
