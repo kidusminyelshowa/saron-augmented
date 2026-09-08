@@ -80,7 +80,10 @@ async function main(): Promise<void> {
   }
 
   if (murals.length === 0) {
-    murals = [{ id: 'mural-001', name: 'Alliance Mural' }, { id: 'mural-002', name: 'Mural 2' }];
+    murals = [
+      { id: 'mural-001', name: 'Alliance Mural' },
+      { id: 'mural-002', name: 'National Cement Mural' },
+    ];
   }
 
   // Get active mural ID from URL search params or default to mural-001
@@ -168,9 +171,10 @@ async function main(): Promise<void> {
       currentEngine = engine;
 
       // Instantiate video layers
+      // Pass target aspect ratio so geometry matches the MindAR anchor plane
+      const targetAR = config.aspectRatio || 1;
       currentLayers = config.layers.map((layerConfig, index) => {
-        const layer = new PackedVideoLayer(layerConfig, basePath);
-        layer.mesh.renderOrder = index;
+        const layer = new PackedVideoLayer(layerConfig, basePath, targetAR, index);
         engine.anchorGroup.add(layer.mesh);
         return layer;
       });
@@ -179,6 +183,15 @@ async function main(): Promise<void> {
 
       overlay.show('scanning');
       await engine.start();
+
+      // Sync layer geometry if detected AR from .mind differs from default
+      const detectedAR = engine.detectedAspectRatio;
+      if (detectedAR) {
+        console.log(`[MuralAR] Target aspect ratio detected: ${detectedAR.toFixed(4)} (config: ${targetAR})`);
+        if (!config.aspectRatio) {
+          currentLayers.forEach((layer) => layer.updateAspectRatio(detectedAR));
+        }
+      }
     } catch (err) {
       console.error(`[MuralAR] Failed to start AR for ${muralId}:`, err);
       if (err instanceof DOMException && err.name === 'NotAllowedError') {

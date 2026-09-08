@@ -2,8 +2,23 @@
  * PackedVideoLayer
  *
  * Creates a Three.js plane mesh that renders a packed video (RGB + luma alpha)
- * using a custom GLSL shader. If video fails to load or is missing, renders an
- * elegant procedural AR fallback plane so tracking is immediately visible.
+ * using a custom GLSL shader. Robust against video loading delays, iOS gesture
+ * restrictions, and local origin handling.
+ *
+ * Geometry & Coordinate System
+ * ────────────────────────────
+ * MindAR normalises the anchor group so that the tracked target image maps to:
+ *   width  = 1   (in Three.js world units)
+ *   height = 1 / targetAspectRatio
+ *
+ * A PlaneGeometry(1, 1) at scale(1, 1) therefore fills the FULL WIDTH of the
+ * target. We set scaleY = 1 / targetAspectRatio so the plane covers the
+ * target height exactly.
+ *
+ * Position transform:
+ *   Normalized mural top-left (0, 0) to bottom-right (1, 1) is converted to
+ *   Three.js anchor center-space where (0, 0) is the target center,
+ *   +X is right, and +Y is up.
  */
 
 import * as THREE from 'three';
@@ -11,8 +26,11 @@ import type { LayerConfig } from '../config/types';
 import vertexShader from './shaders/packed-alpha.vert.glsl?raw';
 import fragmentShader from './shaders/packed-alpha.frag.glsl?raw';
 
-/** Default alpha threshold below which fragments are discarded. */
-const DEFAULT_ALPHA_THRESHOLD = 0.01;
+/** Default alpha noise gate threshold below which fragments are discarded (kills video compression noise/trails). */
+const DEFAULT_ALPHA_THRESHOLD = 0.06;
+
+/** Default edge de-fringing strength (un-multiplies black halo at anti-aliased contour edges). */
+const DEFAULT_DEFRINGE = 1.0;
 
 export class PackedVideoLayer {
   public readonly mesh: THREE.Mesh;
@@ -21,15 +39,34 @@ export class PackedVideoLayer {
   private texture: THREE.Texture;
   private material: THREE.Material;
   private config: LayerConfig;
+  private targetAspectRatio: number;
+  private layerIndex: number;
   private isFallback = false;
+  private shouldBePlaying = false;
 
-  constructor(config: LayerConfig, basePath: string) {
+  /**
+   * @param config       Layer configuration (position, scale, blend, etc.)
+   * @param basePath     Base URL path to resolve video src against
+   * @param targetAR     Target image aspect ratio (width / height).
+   *                     Defaults to 1 (square) if unspecified.
+   * @param layerIndex   Index in layer stack for Z-ordering separation.
+   */
+  constructor(config: LayerConfig, basePath: string, targetAR = 1, layerIndex = 0) {
     this.config = config;
+    this.targetAspectRatio = targetAR;
+    this.layerIndex = layerIndex;
+
+    const fullSrc = `${basePath}/${config.src}`;
 
     // --- Video element ---
     this.video = document.createElement('video');
-    this.video.src = `${basePath}/${config.src}`;
-    this.video.crossOrigin = 'anonymous';
+
+    // Only set crossOrigin if URL is explicitly cross-domain
+    if (fullSrc.startsWith('http://') || fullSrc.startsWith('https://')) {
+      this.video.crossOrigin = 'anonymous';
+    }
+
+    this.video.src = fullSrc;
     this.video.loop = config.loop;
     this.video.muted = true;
     this.video.playsInline = true;
@@ -44,6 +81,11 @@ export class PackedVideoLayer {
     videoTexture.format = THREE.RGBAFormat;
     this.texture = videoTexture;
 
+    // Blend mode uniform value: 0 = normal, 1 = multiply, 2 = additive
+    const blendModeVal = config.blendMode === 'multiply' ? 1 : config.blendMode === 'additive' ? 2 : 0;
+    const alphaThreshold = config.alphaThreshold ?? DEFAULT_ALPHA_THRESHOLD;
+    const defringe = config.defringe ?? DEFAULT_DEFRINGE;
+
     // Shader material
     const shaderMaterial = new THREE.ShaderMaterial({
       transparent: true,
@@ -51,28 +93,62 @@ export class PackedVideoLayer {
       uniforms: {
         uTexture: { value: this.texture },
         uOpacity: { value: config.opacity },
-        uAlphaThreshold: { value: DEFAULT_ALPHA_THRESHOLD },
+        uAlphaThreshold: { value: alphaThreshold },
+        uDefringe: { value: defringe },
+        uBlendMode: { value: blendModeVal },
       },
       vertexShader,
       fragmentShader,
     });
+
+    if (config.blendMode === 'multiply') {
+      shaderMaterial.blending = THREE.MultiplyBlending;
+    } else if (config.blendMode === 'additive') {
+      shaderMaterial.blending = THREE.AdditiveBlending;
+    } else {
+      shaderMaterial.blending = THREE.NormalBlending;
+    }
+
     this.material = shaderMaterial;
 
     // Plane geometry (1:1 normalized canvas)
     const geometry = new THREE.PlaneGeometry(1, 1);
     this.mesh = new THREE.Mesh(geometry, this.material);
+    this.mesh.renderOrder = layerIndex;
 
     // Apply layer transforms
     this.applyTransforms();
 
+    // Event listeners for robust video playback
+    this.video.addEventListener('loadeddata', () => {
+      console.log(`[PackedVideoLayer] Video loaded data: ${config.src}`);
+      if (this.shouldBePlaying && this.video.paused) {
+        this.attemptPlay();
+      }
+    });
+
+    this.video.addEventListener('canplay', () => {
+      if (this.shouldBePlaying && this.video.paused) {
+        this.attemptPlay();
+      }
+    });
+
     // Handle video load errors by switching to procedural fallback
-    this.video.onerror = () => {
-      console.info(`[PackedVideoLayer] Video ${config.src} not found or failed to load. Using AR fallback visualization.`);
+    this.video.onerror = (e) => {
+      console.warn(`[PackedVideoLayer] Video ${config.src} load error:`, e, this.video.error);
       this.useFallbackTexture();
     };
   }
 
-  /** Generate procedural fallback texture when MP4 file is not present yet. */
+  /** Update the target aspect ratio and recalculate transforms. */
+  public updateAspectRatio(newAR: number): void {
+    if (newAR > 0 && Math.abs(this.targetAspectRatio - newAR) > 0.001) {
+      this.targetAspectRatio = newAR;
+      this.applyTransforms();
+    }
+  }
+
+  /** Generate procedural fallback texture when MP4 file is missing or corrupted. */
   private useFallbackTexture(): void {
     if (this.isFallback) return;
     this.isFallback = true;
@@ -128,31 +204,64 @@ export class PackedVideoLayer {
     });
   }
 
-  private applyTransforms(): void {
+  /**
+   * Apply position, scale, and rotation transforms.
+   *
+   * MindAR anchor space:
+   *   x ∈ [-0.5 … +0.5]   (width  = 1)
+   *   y ∈ [-h/2 … +h/2]   (height = 1 / targetAspectRatio)
+   *
+   * A PlaneGeometry(1, 1) fills width=1, height=1.
+   * We scale Y by (1 / targetAR) so the plane matches the physical target height.
+   * Then config's position (0..1) maps to the target coordinate space.
+   */
+  public applyTransforms(): void {
     const { position, scale, rotation } = this.config;
+    const ar = this.targetAspectRatio;
 
-    this.mesh.scale.set(scale[0], scale[1], 1);
+    const width = scale[0];
+    const height = scale[1] / ar;
 
-    // Convert from mural top-left space (0..1) to Three.js center space (-0.5..0.5, Y-up)
-    const x = position[0] + (scale[0] / 2) - 0.5;
-    const y = -(position[1] + (scale[1] / 2) - 0.5);
-    this.mesh.position.set(x, y, 0);
+    this.mesh.scale.set(width, height, 1);
 
+    // Convert from mural top-left space (0..1) to Three.js center space
+    // Center in mural space:
+    const centerX = position[0] + scale[0] / 2;
+    const centerY = position[1] + scale[1] / 2;
+
+    const posX = centerX - 0.5;
+    const posY = (0.5 - centerY) / ar;
+    const posZ = this.layerIndex * 0.001;
+
+    this.mesh.position.set(posX, posY, posZ);
     this.mesh.rotation.z = -(rotation * Math.PI) / 180;
   }
 
-  async play(): Promise<void> {
-    if (this.isFallback) return;
+  private async attemptPlay(): Promise<void> {
     try {
       await this.video.play();
+      console.log(`[PackedVideoLayer] Successfully playing: ${this.config.src}`);
     } catch (err) {
-      // On iOS, play() can fail outside user gesture context.
-      // Don't fall back — the video will start on next user tap.
-      console.warn(`[PackedVideoLayer] Playback deferred for ${this.config.id}:`, err);
+      console.warn(`[PackedVideoLayer] Playback deferred for ${this.config.src}:`, err);
+      // Attach one-time window touch handler to resume playback on next tap
+      const tapHandler = () => {
+        if (this.shouldBePlaying && this.video.paused) {
+          this.video.play().catch(() => {});
+        }
+      };
+      window.addEventListener('touchstart', tapHandler, { once: true });
+      window.addEventListener('click', tapHandler, { once: true });
     }
   }
 
+  async play(): Promise<void> {
+    this.shouldBePlaying = true;
+    if (this.isFallback) return;
+    await this.attemptPlay();
+  }
+
   pause(): void {
+    this.shouldBePlaying = false;
     if (!this.isFallback) {
       this.video.pause();
     }
@@ -161,6 +270,12 @@ export class PackedVideoLayer {
   setAlphaThreshold(value: number): void {
     if (this.material instanceof THREE.ShaderMaterial) {
       this.material.uniforms.uAlphaThreshold.value = value;
+    }
+  }
+
+  setDefringe(value: number): void {
+    if (this.material instanceof THREE.ShaderMaterial) {
+      this.material.uniforms.uDefringe.value = value;
     }
   }
 
@@ -173,6 +288,7 @@ export class PackedVideoLayer {
   }
 
   dispose(): void {
+    this.shouldBePlaying = false;
     this.video.pause();
     this.video.removeAttribute('src');
     this.video.load();

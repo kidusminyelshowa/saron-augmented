@@ -6,6 +6,7 @@
  *  - Start/stop the AR session
  *  - Add content to tracked anchors
  *  - React to target found/lost events
+ *  - Inspect image target dimensions and aspect ratio
  */
 
 import { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js';
@@ -36,17 +37,17 @@ export class AREngine {
   constructor(options: AREngineOptions) {
     this.options = options;
 
-    // Initialize MindAR with custom tracking filters for maximum smoothness.
+    // Initialize MindAR with custom tracking filters for maximum smoothness and stability.
     this.mindar = new MindARThree({
       container: options.container,
       imageTargetSrc: options.targetSrc,
       uiLoading: 'no',
       uiScanning: 'no',
       uiError: 'no',
-      filterMinCF: 0.0001,  // Greatly reduces jitter when standing still
-      filterBeta: 0.001,    // Smooths out slow rotational/translation drift
+      filterMinCF: 0.001,  // Balanced cutoff frequency: eliminates static jitter without introducing motion lag
+      filterBeta: 0.01,    // Responsive tracking catch-up on movement
       warmupTolerance: 5,
-      missTolerance: 5
+      missTolerance: 5,
     });
 
     this.renderer = this.mindar.renderer;
@@ -67,6 +68,25 @@ export class AREngine {
       console.log('[AREngine] Target Lost');
       this.options.onTargetLost?.();
     };
+  }
+
+  /** Dimensions [width, height] of the tracked image target. */
+  get targetDimensions(): [number, number] | null {
+    const controller = (this.mindar as unknown as { controller?: { markerDimensions?: number[][] } }).controller;
+    const dims = controller?.markerDimensions?.[0];
+    if (Array.isArray(dims) && dims.length === 2 && dims[0] > 0 && dims[1] > 0) {
+      return [dims[0], dims[1]];
+    }
+    return null;
+  }
+
+  /** Detected target aspect ratio (width / height) from the compiled .mind file. */
+  get detectedAspectRatio(): number | null {
+    const dims = this.targetDimensions;
+    if (dims) {
+      return dims[0] / dims[1];
+    }
+    return null;
   }
 
   /** Start the AR session (requests camera, begins tracking). */

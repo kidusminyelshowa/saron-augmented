@@ -31,6 +31,21 @@ export interface LayerConfig {
 
   /** Whether the video should loop. */
   loop: boolean;
+
+  /** Optional blending mode for compositing ('normal' | 'multiply' | 'additive'). */
+  blendMode?: 'normal' | 'multiply' | 'additive';
+
+  /**
+   * Alpha noise threshold (0–1). Default: 0.06.
+   * Discards video compression macroblock noise and ghosting trails.
+   */
+  alphaThreshold?: number;
+
+  /**
+   * Edge de-fringing intensity (0–1). Default: 1.0.
+   * Eliminates black halos caused by straight-alpha compression on black canvas.
+   */
+  defringe?: number;
 }
 
 /** Configuration for an entire mural AR experience. */
@@ -43,6 +58,15 @@ export interface MuralConfig {
 
   /** Path to the MindAR .mind target file. */
   target: string;
+
+  /**
+   * Target image aspect ratio (width / height).
+   *
+   * MindAR normalizes the anchor plane to: width = 1, height = 1/aspectRatio.
+   * When present, the engine automatically sizes video layers to match
+   * the target geometry so content sticks to the physical artwork.
+   */
+  aspectRatio?: number;
 
   /** Ordered list of video layers to composite over the mural. */
   layers: LayerConfig[];
