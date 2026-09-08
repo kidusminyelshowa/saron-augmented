@@ -1,0 +1,44 @@
+{
+  "id": "mural-002",
+  "name": "National Cement Mural",
+  "target": "national-cement.mind",
+  "aspectRatio": 2.04067,
+  "layers": [
+    {
+      "id": "layer-01-background",
+      "src": "Background_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "opacity": 1,
+      "loop": true
+    },
+    {
+      "id": "layer-02-middleground",
+      "src": "Middleground_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "opacity": 1,
+      "loop": true
+    },
+    {
+      "id": "layer-03-bubbles",
+      "src": "Bubbles_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "opacity": 1,
+      "loop": true
+    },
+    {
+      "id": "layer-04-foreground",
+      "src": "Foreground_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "opacity": 1,
+      "loop": true
+    }
+  ]
+}

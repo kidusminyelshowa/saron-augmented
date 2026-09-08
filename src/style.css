@@ -207,3 +207,59 @@ body {
 .ar-overlay--scanning .ar-overlay__spinner-svg {
   color: #38bdf8;
 }
+
+/* --- Mural Selector UI --- */
+.mural-selector {
+  position: fixed;
+  top: max(1.25rem, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mural-selector:hover {
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.mural-selector__label {
+  display: flex;
+  align-items: center;
+  color: #38bdf8;
+}
+
+.mural-selector__select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: rgba(255, 255, 255, 0.95);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding-right: 1.25rem;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right center;
+}
+
+.mural-selector__select option {
+  background: #0f172a;
+  color: #ffffff;
+  padding: 0.5rem;
+}
+

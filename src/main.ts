@@ -3,21 +3,19 @@
  *
  * Bootstraps the AR experience:
  *  1. Browser compatibility check
- *  2. Load mural configuration
- *  3. Wait for user tap (required by iOS for video autoplay)
- *  4. Initialize AR engine with MindAR + Three.js
- *  5. Add video layers to tracked anchor
- *  6. React to target detection / loss
+ *  2. Load mural catalog & active mural configuration
+ *  3. Render Mural Selection UI selector
+ *  4. Wait for user tap (required by iOS for video autoplay)
+ *  5. Initialize AR engine with MindAR + Three.js
+ *  6. React to target detection / loss & handle dynamic mural switching
  */
 
 import './style.css';
 import { AREngine } from './ar/AREngine';
 import { Overlay } from './ui/Overlay';
+import { MuralSelector, type MuralItem } from './ui/MuralSelector';
 import { PackedVideoLayer } from './video/PackedVideoLayer';
 import type { MuralConfig } from './config/types';
-
-/** Path to the mural config — can later be derived from the URL path. */
-const MURAL_CONFIG_PATH = '/murals/mural-001/config.json';
 
 function isBrowserSupported(): boolean {
   return typeof navigator.mediaDevices?.getUserMedia === 'function' && !!window.WebGLRenderingContext;
@@ -26,27 +24,26 @@ function isBrowserSupported(): boolean {
 /**
  * Prime all video elements for iOS playback.
  * iOS Safari requires video.play() to be called within a user gesture.
- * We briefly play+pause each video to "unlock" it, then MindAR callbacks
- * can freely play/pause later without gesture restrictions.
  */
 function primeVideosForIOS(layers: PackedVideoLayer[]): void {
   for (const layer of layers) {
     const v = layer.video;
     const playPromise = v.play();
     if (playPromise) {
-      playPromise.then(() => {
-        v.pause();
-        v.currentTime = 0;
-      }).catch(() => {
-        // Still failed — will retry on target detection
-      });
+      playPromise
+        .then(() => {
+          v.pause();
+          v.currentTime = 0;
+        })
+        .catch(() => {
+          // Still failed — will retry on target detection
+        });
     }
   }
 }
 
 /**
- * Show a "Tap to Start" prompt and wait for a user tap.
- * Returns a Promise that resolves on the first touchstart/click.
+ * Show a "Tap to Start" prompt and wait for user tap.
  */
 function waitForUserTap(overlay: Overlay): Promise<void> {
   overlay.show('tap-to-start');
@@ -71,19 +68,27 @@ async function main(): Promise<void> {
 
   overlay.show('loading');
 
-  // Load mural configuration
-  let config: MuralConfig;
+  // Fetch mural index catalog
+  let murals: MuralItem[] = [];
   try {
-    const res = await fetch(MURAL_CONFIG_PATH);
-    if (!res.ok) throw new Error(`Config fetch failed: ${res.status}`);
-    config = await res.json();
+    const catalogRes = await fetch('/murals/index.json');
+    if (catalogRes.ok) {
+      murals = await catalogRes.json();
+    }
   } catch (err) {
-    console.error('[MuralAR] Failed to load mural config:', err);
-    overlay.show('unsupported');
-    return;
+    console.warn('[MuralAR] Catalog fetch failed, falling back to default:', err);
   }
 
-  const basePath = MURAL_CONFIG_PATH.replace('/config.json', '');
+  if (murals.length === 0) {
+    murals = [{ id: 'mural-001', name: 'Alliance Mural' }, { id: 'mural-002', name: 'Mural 2' }];
+  }
+
+  // Get active mural ID from URL search params or default to mural-001
+  const urlParams = new URLSearchParams(window.location.search);
+  let activeMuralId = urlParams.get('mural') || murals[0].id;
+  if (!murals.some((m) => m.id === activeMuralId)) {
+    activeMuralId = murals[0].id;
+  }
 
   const container = document.getElementById('ar-container');
   if (!container) {
@@ -91,61 +96,107 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Wait for user tap — required on iOS for video autoplay permissions
-  await waitForUserTap(overlay);
+  let currentEngine: AREngine | null = null;
+  let currentLayers: PackedVideoLayer[] = [];
+  let userHasTapped = false;
 
-  overlay.show('loading');
+  // Render Mural Selector UI
+  const selector = new MuralSelector({
+    murals,
+    activeMuralId,
+    onSelect: (newMuralId) => {
+      switchMural(newMuralId);
+    },
+  });
 
-  let layers: PackedVideoLayer[] = [];
+  async function startMuralSession(muralId: string): Promise<void> {
+    overlay.show('loading');
 
-  // Initialize AR Engine
-  let engine: AREngine;
-  try {
-    engine = new AREngine({
-      container,
-      targetSrc: `${basePath}/${config.target}`,
-      onTargetFound: () => {
-        console.log('[MuralAR] Target found!');
-        overlay.hide();
-        layers.forEach((layer) => layer.play());
-      },
-      onTargetLost: () => {
-        console.log('[MuralAR] Target lost');
-        overlay.show('tracking-lost');
-        layers.forEach((layer) => layer.pause());
-      },
-    });
+    // Clean up previous engine & layers
+    if (currentEngine) {
+      currentEngine.stop();
+      currentEngine = null;
+    }
+    currentLayers.forEach((layer) => layer.dispose());
+    currentLayers = [];
+    container!.innerHTML = '';
 
-    // Create and attach layers to anchor group upfront with explicit depth renderOrder
-    layers = config.layers.map((layerConfig, index) => {
-      const layer = new PackedVideoLayer(layerConfig, basePath);
-      layer.mesh.renderOrder = index;
-      engine.anchorGroup.add(layer.mesh);
-      return layer;
-    });
+    // Update URL parameter without page reload
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('mural', muralId);
+    window.history.replaceState(null, '', newUrl.toString());
 
-    // Prime videos within user gesture context (iOS requirement)
-    primeVideosForIOS(layers);
-
-  } catch (err) {
-    console.error('[MuralAR] Failed to initialize AR engine:', err);
-    overlay.show('unsupported');
-    return;
-  }
-
-  // Start AR session
-  overlay.show('scanning');
-
-  try {
-    await engine.start();
-  } catch (err) {
-    console.error('[MuralAR] Failed to start AR:', err);
-    if (err instanceof DOMException && err.name === 'NotAllowedError') {
-      overlay.show('camera-denied');
-    } else {
+    // Load mural config
+    const configPath = `/murals/${muralId}/config.json`;
+    let config: MuralConfig;
+    try {
+      const res = await fetch(configPath);
+      if (!res.ok) throw new Error(`Config fetch failed: ${res.status}`);
+      config = await res.json();
+    } catch (err) {
+      console.error(`[MuralAR] Failed to load config for ${muralId}:`, err);
       overlay.show('unsupported');
+      return;
+    }
+
+    const basePath = `/murals/${muralId}`;
+
+    // Prompt user tap on iOS if not tapped yet
+    if (!userHasTapped) {
+      await waitForUserTap(overlay);
+      userHasTapped = true;
+    }
+
+    overlay.show('loading');
+
+    try {
+      const engine = new AREngine({
+        container: container!,
+        targetSrc: `${basePath}/${config.target}`,
+        onTargetFound: () => {
+          console.log(`[MuralAR] Target found for ${muralId}!`);
+          overlay.hide();
+          currentLayers.forEach((layer) => layer.play());
+        },
+        onTargetLost: () => {
+          console.log(`[MuralAR] Target lost for ${muralId}`);
+          overlay.show('tracking-lost');
+          currentLayers.forEach((layer) => layer.pause());
+        },
+      });
+
+      currentEngine = engine;
+
+      // Instantiate video layers
+      currentLayers = config.layers.map((layerConfig, index) => {
+        const layer = new PackedVideoLayer(layerConfig, basePath);
+        layer.mesh.renderOrder = index;
+        engine.anchorGroup.add(layer.mesh);
+        return layer;
+      });
+
+      primeVideosForIOS(currentLayers);
+
+      overlay.show('scanning');
+      await engine.start();
+    } catch (err) {
+      console.error(`[MuralAR] Failed to start AR for ${muralId}:`, err);
+      if (err instanceof DOMException && err.name === 'NotAllowedError') {
+        overlay.show('camera-denied');
+      } else {
+        overlay.show('unsupported');
+      }
     }
   }
+
+  function switchMural(muralId: string): void {
+    activeMuralId = muralId;
+    selector.setActiveMural(muralId);
+    startMuralSession(muralId);
+  }
+
+  // Start initial mural session
+  await startMuralSession(activeMuralId);
 }
 
 main().catch(console.error);
