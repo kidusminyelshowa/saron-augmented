@@ -10,6 +10,7 @@
       "position": [0, 0],
       "scale": [1, 1],
       "rotation": 0,
+      "depth": 0,
       "opacity": 1,
       "loop": true
     },
@@ -19,6 +20,7 @@
       "position": [0, 0],
       "scale": [1, 1],
       "rotation": 0,
+      "depth": 0.015,
       "opacity": 1,
       "loop": true
     },
@@ -28,6 +30,7 @@
       "position": [0, 0],
       "scale": [1, 1],
       "rotation": 0,
+      "depth": 0.03,
       "opacity": 1,
       "loop": true
     },
@@ -37,6 +40,7 @@
       "position": [0, 0],
       "scale": [1, 1],
       "rotation": 0,
+      "depth": 0.045,
       "opacity": 1,
       "loop": true
     },
@@ -46,6 +50,7 @@
       "position": [0, 0],
       "scale": [1, 1],
       "rotation": 0,
+      "depth": 0.06,
       "opacity": 1,
       "loop": true
     },
@@ -55,6 +60,7 @@
       "position": [0, 0],
       "scale": [1, 1],
       "rotation": 0,
+      "depth": 0.08,
       "opacity": 1,
       "loop": true
     }

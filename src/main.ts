@@ -22,6 +22,18 @@ function isBrowserSupported(): boolean {
 }
 
 /**
+ * Optional `?depth=<n>` URL parameter that multiplies every layer's depth.
+ * Lets the parallax strength be tuned in front of the wall without a redeploy
+ * (e.g. ?depth=0 for flat, ?depth=2 for double depth).
+ */
+function getDepthScaleOverride(): number | undefined {
+  const raw = new URLSearchParams(window.location.search).get('depth');
+  if (raw === null) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+/**
  * Prime all video elements for iOS playback.
  * iOS Safari requires video.play() to be called within a user gesture.
  */
@@ -173,8 +185,12 @@ async function main(): Promise<void> {
       // Instantiate video layers
       // Pass target aspect ratio so geometry matches the MindAR anchor plane
       const targetAR = config.aspectRatio || 1;
+      const depthOptions = {
+        viewingDistance: config.viewingDistance,
+        depthScale: getDepthScaleOverride(),
+      };
       currentLayers = config.layers.map((layerConfig, index) => {
-        const layer = new PackedVideoLayer(layerConfig, basePath, targetAR, index);
+        const layer = new PackedVideoLayer(layerConfig, basePath, targetAR, index, depthOptions);
         engine.anchorGroup.add(layer.mesh);
         return layer;
       });

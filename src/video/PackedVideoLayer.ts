@@ -19,6 +19,14 @@
  *   Normalized mural top-left (0, 0) to bottom-right (1, 1) is converted to
  *   Three.js anchor center-space where (0, 0) is the target center,
  *   +X is right, and +Y is up.
+ *
+ * Parallax depth:
+ *   A layer with `depth > 0` is lifted off the wall along +Z (towards the
+ *   viewer). To keep it registered with the artwork when seen head-on from
+ *   the expected viewing distance D, its size and offset from the target
+ *   centre are shrunk by (D - depth) / D, which cancels the perspective
+ *   magnification. Viewed from any other angle the layers shift against
+ *   each other, which reads as real depth.
  */
 
 import * as THREE from 'three';
@@ -32,6 +40,20 @@ const DEFAULT_ALPHA_THRESHOLD = 0.06;
 /** Default edge de-fringing strength (un-multiplies black halo at anti-aliased contour edges). */
 const DEFAULT_DEFRINGE = 1.0;
 
+/** Default head-on viewing distance, in mural widths, used for parallax size compensation. */
+export const DEFAULT_VIEWING_DISTANCE = 1.5;
+
+/** Tiny per-layer Z offset that keeps coplanar layers from z-fighting. */
+const LAYER_Z_EPSILON = 0.001;
+
+/** Options controlling how a layer's depth is turned into parallax. */
+export interface DepthOptions {
+  /** Expected head-on viewing distance, in mural widths. */
+  viewingDistance?: number;
+  /** Global multiplier applied to every layer's depth (for tuning on site). */
+  depthScale?: number;
+}
+
 export class PackedVideoLayer {
   public readonly mesh: THREE.Mesh;
   public readonly video: HTMLVideoElement;
@@ -41,6 +63,8 @@ export class PackedVideoLayer {
   private config: LayerConfig;
   private targetAspectRatio: number;
   private layerIndex: number;
+  private viewingDistance: number;
+  private depthScale: number;
   private isFallback = false;
   private shouldBePlaying = false;
 
@@ -50,11 +74,20 @@ export class PackedVideoLayer {
    * @param targetAR     Target image aspect ratio (width / height).
    *                     Defaults to 1 (square) if unspecified.
    * @param layerIndex   Index in layer stack for Z-ordering separation.
+   * @param depthOptions Viewing distance and global depth multiplier for parallax.
    */
-  constructor(config: LayerConfig, basePath: string, targetAR = 1, layerIndex = 0) {
+  constructor(
+    config: LayerConfig,
+    basePath: string,
+    targetAR = 1,
+    layerIndex = 0,
+    depthOptions: DepthOptions = {},
+  ) {
     this.config = config;
     this.targetAspectRatio = targetAR;
     this.layerIndex = layerIndex;
+    this.viewingDistance = depthOptions.viewingDistance ?? DEFAULT_VIEWING_DISTANCE;
+    this.depthScale = depthOptions.depthScale ?? 1;
 
     const fullSrc = `${basePath}/${config.src}`;
 
@@ -219,8 +252,15 @@ export class PackedVideoLayer {
     const { position, scale, rotation } = this.config;
     const ar = this.targetAspectRatio;
 
-    const width = scale[0];
-    const height = scale[1] / ar;
+    // Distance in front of the wall (mural-width units), clamped so the layer
+    // never reaches the assumed camera position.
+    const D = this.viewingDistance;
+    const depth = Math.min(Math.max((this.config.depth ?? 0) * this.depthScale, 0), D * 0.9);
+    // Shrink factor that cancels perspective magnification when viewed head-on.
+    const k = (D - depth) / D;
+
+    const width = scale[0] * k;
+    const height = (scale[1] / ar) * k;
 
     this.mesh.scale.set(width, height, 1);
 
@@ -229,9 +269,9 @@ export class PackedVideoLayer {
     const centerX = position[0] + scale[0] / 2;
     const centerY = position[1] + scale[1] / 2;
 
-    const posX = centerX - 0.5;
-    const posY = (0.5 - centerY) / ar;
-    const posZ = this.layerIndex * 0.001;
+    const posX = (centerX - 0.5) * k;
+    const posY = ((0.5 - centerY) / ar) * k;
+    const posZ = depth + this.layerIndex * LAYER_Z_EPSILON;
 
     this.mesh.position.set(posX, posY, posZ);
     this.mesh.rotation.z = -(rotation * Math.PI) / 180;

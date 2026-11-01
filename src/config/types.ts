@@ -46,6 +46,14 @@ export interface LayerConfig {
    * Eliminates black halos caused by straight-alpha compression on black canvas.
    */
   defringe?: number;
+
+  /**
+   * Distance the layer floats in front of the wall, in mural widths. Default: 0.
+   * E.g. on a 3 m wide mural, 0.02 = 6 cm. Larger values give stronger parallax.
+   * The layer is automatically shrunk so it still lines up with the artwork
+   * when viewed head-on from `viewingDistance`.
+   */
+  depth?: number;
 }
 
 /** Configuration for an entire mural AR experience. */
@@ -67,6 +75,12 @@ export interface MuralConfig {
    * the target geometry so content sticks to the physical artwork.
    */
   aspectRatio?: number;
+
+  /**
+   * Typical head-on viewing distance, in mural widths. Default: 1.5.
+   * Used to size parallax layers so they line up from this distance.
+   */
+  viewingDistance?: number;
 
   /** Ordered list of video layers to composite over the mural. */
   layers: LayerConfig[];
