@@ -15,13 +15,17 @@ uniform float uOpacity;
 uniform float uAlphaThreshold; // Noise gate threshold (e.g. 0.06)
 uniform float uDefringe;       // Edge de-fringing strength (0.0 to 1.0)
 uniform int uBlendMode;        // 0: Normal, 1: Multiply, 2: Additive
+uniform vec2 uParallax;        // Parallax texture offset in UV units
 
 varying vec2 vUv;
 
 void main() {
-  // Clamp UVs to avoid bilinear sampling bleed across the 0.5 seam or outer borders
-  float clampedX = clamp(vUv.x, 0.001, 0.999);
-  float clampedY = clamp(vUv.y, 0.001, 0.999);
+  // Shift content for parallax, then clamp UVs to avoid bilinear sampling bleed
+  // across the 0.5 seam or outer borders. Clamping also stretches edge pixels
+  // into the area uncovered by the shift, so no blank strip appears.
+  vec2 uv = vUv - uParallax;
+  float clampedX = clamp(uv.x, 0.001, 0.999);
+  float clampedY = clamp(uv.y, 0.001, 0.999);
 
   // Remap to top half (RGB) and bottom half (Alpha) with safe half-pixel inset
   vec2 rgbUv = vec2(clampedX, clampedY * 0.498 + 0.501);

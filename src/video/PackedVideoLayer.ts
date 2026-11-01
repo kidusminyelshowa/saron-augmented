@@ -21,12 +21,13 @@
  *   +X is right, and +Y is up.
  *
  * Parallax depth:
- *   A layer with `depth > 0` is lifted off the wall along +Z (towards the
- *   viewer). To keep it registered with the artwork when seen head-on from
- *   the expected viewing distance D, its size and offset from the target
- *   centre are shrunk by (D - depth) / D, which cancels the perspective
- *   magnification. Viewed from any other angle the layers shift against
- *   each other, which reads as real depth.
+ *   Every layer stays on the wall plane, so tracking jitter moves all layers
+ *   together, exactly like the painted mural. A layer's `depth` is simulated
+ *   instead by sliding its texture inside its own frame according to the
+ *   (smoothed) viewing angle: a layer `depth` in front of the wall seen at
+ *   view tangent t appears displaced by -depth * t. Sampling is clamped, so
+ *   content touching the frame edge stretches slightly instead of leaving a
+ *   blank strip.
  */
 
 import * as THREE from 'three';
@@ -40,16 +41,11 @@ const DEFAULT_ALPHA_THRESHOLD = 0.06;
 /** Default edge de-fringing strength (un-multiplies black halo at anti-aliased contour edges). */
 const DEFAULT_DEFRINGE = 1.0;
 
-/** Default head-on viewing distance, in mural widths, used for parallax size compensation. */
-export const DEFAULT_VIEWING_DISTANCE = 1.5;
-
 /** Tiny per-layer Z offset that keeps coplanar layers from z-fighting. */
 const LAYER_Z_EPSILON = 0.001;
 
 /** Options controlling how a layer's depth is turned into parallax. */
 export interface DepthOptions {
-  /** Expected head-on viewing distance, in mural widths. */
-  viewingDistance?: number;
   /** Global multiplier applied to every layer's depth (for tuning on site). */
   depthScale?: number;
 }
@@ -63,7 +59,6 @@ export class PackedVideoLayer {
   private config: LayerConfig;
   private targetAspectRatio: number;
   private layerIndex: number;
-  private viewingDistance: number;
   private depthScale: number;
   private isFallback = false;
   private shouldBePlaying = false;
@@ -86,7 +81,6 @@ export class PackedVideoLayer {
     this.config = config;
     this.targetAspectRatio = targetAR;
     this.layerIndex = layerIndex;
-    this.viewingDistance = depthOptions.viewingDistance ?? DEFAULT_VIEWING_DISTANCE;
     this.depthScale = depthOptions.depthScale ?? 1;
 
     const fullSrc = `${basePath}/${config.src}`;
@@ -129,6 +123,7 @@ export class PackedVideoLayer {
         uAlphaThreshold: { value: alphaThreshold },
         uDefringe: { value: defringe },
         uBlendMode: { value: blendModeVal },
+        uParallax: { value: new THREE.Vector2(0, 0) },
       },
       vertexShader,
       fragmentShader,
@@ -252,15 +247,8 @@ export class PackedVideoLayer {
     const { position, scale, rotation } = this.config;
     const ar = this.targetAspectRatio;
 
-    // Distance in front of the wall (mural-width units), clamped so the layer
-    // never reaches the assumed camera position.
-    const D = this.viewingDistance;
-    const depth = Math.min(Math.max((this.config.depth ?? 0) * this.depthScale, 0), D * 0.9);
-    // Shrink factor that cancels perspective magnification when viewed head-on.
-    const k = (D - depth) / D;
-
-    const width = scale[0] * k;
-    const height = (scale[1] / ar) * k;
+    const width = scale[0];
+    const height = scale[1] / ar;
 
     this.mesh.scale.set(width, height, 1);
 
@@ -269,12 +257,40 @@ export class PackedVideoLayer {
     const centerX = position[0] + scale[0] / 2;
     const centerY = position[1] + scale[1] / 2;
 
-    const posX = (centerX - 0.5) * k;
-    const posY = ((0.5 - centerY) / ar) * k;
-    const posZ = depth + this.layerIndex * LAYER_Z_EPSILON;
+    const posX = centerX - 0.5;
+    const posY = (0.5 - centerY) / ar;
+    const posZ = this.layerIndex * LAYER_Z_EPSILON;
 
     this.mesh.position.set(posX, posY, posZ);
     this.mesh.rotation.z = -(rotation * Math.PI) / 180;
+  }
+
+  /**
+   * Update the parallax offset from the current view direction.
+   *
+   * @param tanX Horizontal view tangent (camera x / camera distance) in anchor space.
+   * @param tanY Vertical view tangent (camera y / camera distance) in anchor space.
+   */
+  public setParallax(tanX: number, tanY: number): void {
+    if (!(this.material instanceof THREE.ShaderMaterial)) return;
+    const depth = Math.max(this.config.depth ?? 0, 0) * this.depthScale;
+    const uniform = this.material.uniforms.uParallax.value as THREE.Vector2;
+    if (depth === 0) {
+      uniform.set(0, 0);
+      return;
+    }
+
+    // Apparent displacement on the wall, in anchor units.
+    const shiftX = -depth * tanX;
+    const shiftY = -depth * tanY;
+
+    // Rotate into the layer's local frame (mesh is rotated by -rotation).
+    const r = (this.config.rotation * Math.PI) / 180;
+    const localX = shiftX * Math.cos(r) - shiftY * Math.sin(r);
+    const localY = shiftX * Math.sin(r) + shiftY * Math.cos(r);
+
+    // Convert to UV units of this layer's plane.
+    uniform.set(localX / this.mesh.scale.x, localY / this.mesh.scale.y);
   }
 
   private async attemptPlay(): Promise<void> {

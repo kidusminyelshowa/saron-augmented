@@ -178,6 +178,9 @@ async function main(): Promise<void> {
           overlay.show('tracking-lost');
           currentLayers.forEach((layer) => layer.pause());
         },
+        onViewAngle: (tanX, tanY) => {
+          currentLayers.forEach((layer) => layer.setParallax(tanX, tanY));
+        },
       });
 
       currentEngine = engine;
@@ -185,10 +188,7 @@ async function main(): Promise<void> {
       // Instantiate video layers
       // Pass target aspect ratio so geometry matches the MindAR anchor plane
       const targetAR = config.aspectRatio || 1;
-      const depthOptions = {
-        viewingDistance: config.viewingDistance,
-        depthScale: getDepthScaleOverride(),
-      };
+      const depthOptions = { depthScale: getDepthScaleOverride() };
       currentLayers = config.layers.map((layerConfig, index) => {
         const layer = new PackedVideoLayer(layerConfig, basePath, targetAR, index, depthOptions);
         engine.anchorGroup.add(layer.mesh);
