@@ -28,6 +28,15 @@
  *   view tangent t appears displaced by -depth * t. Sampling is clamped, so
  *   content touching the frame edge stretches slightly instead of leaving a
  *   blank strip.
+ *
+ * Relief:
+ *   With a depth map (a third "depth" band in the packed video, or a separate
+ *   grayscale image), each pixel uses its own distance from the wall
+ *   (depth + relief * map), so shapes look rounded instead of flat cut-outs.
+ *
+ * Wall look:
+ *   A wall-fixed grain and a light multiplier sampled from the camera feed
+ *   make the layers read as paint on the wall rather than a glowing screen.
  */
 
 import * as THREE from 'three';
@@ -44,10 +53,18 @@ const DEFAULT_DEFRINGE = 1.0;
 /** Tiny per-layer Z offset that keeps coplanar layers from z-fighting. */
 const LAYER_Z_EPSILON = 0.001;
 
-/** Options controlling how a layer's depth is turned into parallax. */
+/** Default relief depth (mural widths) for the white end of a layer's depth map. */
+const DEFAULT_RELIEF = 0.03;
+
+/** Wall grain cells per mural width (roughly hand-sized patches on a 6 m wall). */
+const GRAIN_SCALE = 40;
+
+/** Options controlling depth and the wall look for a layer. */
 export interface DepthOptions {
   /** Global multiplier applied to every layer's depth (for tuning on site). */
   depthScale?: number;
+  /** Painted-wall grain strength for this mural (0 = off). */
+  grain?: number;
 }
 
 export class PackedVideoLayer {
@@ -60,6 +77,7 @@ export class PackedVideoLayer {
   private targetAspectRatio: number;
   private layerIndex: number;
   private depthScale: number;
+  private depthTexture: THREE.Texture | null = null;
   private isFallback = false;
   private shouldBePlaying = false;
 
@@ -123,7 +141,17 @@ export class PackedVideoLayer {
         uAlphaThreshold: { value: alphaThreshold },
         uDefringe: { value: defringe },
         uBlendMode: { value: blendModeVal },
-        uParallax: { value: new THREE.Vector2(0, 0) },
+        uBands: { value: config.packing === 'color-alpha-depth' ? 3 : 2 },
+        uDepthSource: { value: 0 },
+        uDepthMap: { value: null },
+        uViewTan: { value: new THREE.Vector2(0, 0) },
+        uLayerDepth: { value: 0 },
+        uRelief: { value: 0 },
+        uLight: { value: new THREE.Vector3(1, 1, 1) },
+        uGrain: { value: depthOptions.grain ?? 0 },
+        uWallOrigin: { value: new THREE.Vector2(0, 0) },
+        uWallSize: { value: new THREE.Vector2(1, 1) },
+        uGrainScale: { value: GRAIN_SCALE },
       },
       vertexShader,
       fragmentShader,
@@ -138,6 +166,24 @@ export class PackedVideoLayer {
     }
 
     this.material = shaderMaterial;
+
+    // Depth source for per-pixel relief: a packed depth band wins over a separate image.
+    if (config.packing === 'color-alpha-depth') {
+      shaderMaterial.uniforms.uDepthSource.value = 1;
+    } else if (config.depthMap) {
+      this.depthTexture = new THREE.TextureLoader().load(
+        `${basePath}/${config.depthMap}`,
+        () => {
+          shaderMaterial.uniforms.uDepthSource.value = 2;
+        },
+        undefined,
+        (err) => console.warn(`[PackedVideoLayer] Depth map ${config.depthMap} failed to load:`, err),
+      );
+      this.depthTexture.minFilter = THREE.LinearFilter;
+      this.depthTexture.magFilter = THREE.LinearFilter;
+      shaderMaterial.uniforms.uDepthMap.value = this.depthTexture;
+    }
+    this.updateDepthUniforms();
 
     // Plane geometry (1:1 normalized canvas)
     const geometry = new THREE.PlaneGeometry(1, 1);
@@ -263,6 +309,20 @@ export class PackedVideoLayer {
 
     this.mesh.position.set(posX, posY, posZ);
     this.mesh.rotation.z = -(rotation * Math.PI) / 180;
+
+    if (this.material instanceof THREE.ShaderMaterial) {
+      (this.material.uniforms.uWallOrigin.value as THREE.Vector2).set(posX, posY);
+      (this.material.uniforms.uWallSize.value as THREE.Vector2).set(width, height);
+    }
+  }
+
+  /** Push the layer's depth and relief (scaled by the global depth multiplier) to the shader. */
+  private updateDepthUniforms(): void {
+    if (!(this.material instanceof THREE.ShaderMaterial)) return;
+    const hasDepthSource = this.config.packing === 'color-alpha-depth' || !!this.config.depthMap;
+    const relief = hasDepthSource ? Math.max(this.config.relief ?? DEFAULT_RELIEF, 0) : 0;
+    this.material.uniforms.uLayerDepth.value = Math.max(this.config.depth ?? 0, 0) * this.depthScale;
+    this.material.uniforms.uRelief.value = relief * this.depthScale;
   }
 
   /**
@@ -273,24 +333,26 @@ export class PackedVideoLayer {
    */
   public setParallax(tanX: number, tanY: number): void {
     if (!(this.material instanceof THREE.ShaderMaterial)) return;
-    const depth = Math.max(this.config.depth ?? 0, 0) * this.depthScale;
-    const uniform = this.material.uniforms.uParallax.value as THREE.Vector2;
-    if (depth === 0) {
-      uniform.set(0, 0);
-      return;
-    }
 
-    // Apparent displacement on the wall, in anchor units.
-    const shiftX = -depth * tanX;
-    const shiftY = -depth * tanY;
-
-    // Rotate into the layer's local frame (mesh is rotated by -rotation).
+    // Content at distance d from the wall appears displaced by -d * tan on the wall,
+    // so we sample the texture at +d * tan (in UV units). Rotate into the layer's
+    // local frame (mesh is rotated by -rotation) and divide by its size.
     const r = (this.config.rotation * Math.PI) / 180;
-    const localX = shiftX * Math.cos(r) - shiftY * Math.sin(r);
-    const localY = shiftX * Math.sin(r) + shiftY * Math.cos(r);
+    const localX = tanX * Math.cos(r) - tanY * Math.sin(r);
+    const localY = tanX * Math.sin(r) + tanY * Math.cos(r);
+    (this.material.uniforms.uViewTan.value as THREE.Vector2).set(
+      localX / this.mesh.scale.x,
+      localY / this.mesh.scale.y,
+    );
+  }
 
-    // Convert to UV units of this layer's plane.
-    uniform.set(localX / this.mesh.scale.x, localY / this.mesh.scale.y);
+  /**
+   * Match the layer to the scene lighting.
+   * @param light Per-channel multiplier (1 = as authored).
+   */
+  public setLight(r: number, g: number, b: number): void {
+    if (!(this.material instanceof THREE.ShaderMaterial)) return;
+    (this.material.uniforms.uLight.value as THREE.Vector3).set(r, g, b);
   }
 
   private async attemptPlay(): Promise<void> {
@@ -350,6 +412,7 @@ export class PackedVideoLayer {
     this.video.load();
 
     this.texture.dispose();
+    this.depthTexture?.dispose();
     this.material.dispose();
     this.mesh.geometry.dispose();
   }
