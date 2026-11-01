@@ -19,6 +19,24 @@
  *   Normalized mural top-left (0, 0) to bottom-right (1, 1) is converted to
  *   Three.js anchor center-space where (0, 0) is the target center,
  *   +X is right, and +Y is up.
+ *
+ * Parallax depth:
+ *   Every layer stays on the wall plane, so tracking jitter moves all layers
+ *   together, exactly like the painted mural. A layer's `depth` is simulated
+ *   instead by sliding its texture inside its own frame according to the
+ *   (smoothed) viewing angle: a layer `depth` in front of the wall seen at
+ *   view tangent t appears displaced by -depth * t. Sampling is clamped, so
+ *   content touching the frame edge stretches slightly instead of leaving a
+ *   blank strip.
+ *
+ * Relief:
+ *   With a depth map (a third "depth" band in the packed video, or a separate
+ *   grayscale image), each pixel uses its own distance from the wall
+ *   (depth + relief * map), so shapes look rounded instead of flat cut-outs.
+ *
+ * Wall look:
+ *   A wall-fixed grain and a light multiplier sampled from the camera feed
+ *   make the layers read as paint on the wall rather than a glowing screen.
  */
 
 import * as THREE from 'three';
@@ -32,6 +50,23 @@ const DEFAULT_ALPHA_THRESHOLD = 0.06;
 /** Default edge de-fringing strength (un-multiplies black halo at anti-aliased contour edges). */
 const DEFAULT_DEFRINGE = 1.0;
 
+/** Tiny per-layer Z offset that keeps coplanar layers from z-fighting. */
+const LAYER_Z_EPSILON = 0.001;
+
+/** Default relief depth (mural widths) for the white end of a layer's depth map. */
+const DEFAULT_RELIEF = 0.03;
+
+/** Wall grain cells per mural width (roughly hand-sized patches on a 6 m wall). */
+const GRAIN_SCALE = 40;
+
+/** Options controlling depth and the wall look for a layer. */
+export interface DepthOptions {
+  /** Global multiplier applied to every layer's depth (for tuning on site). */
+  depthScale?: number;
+  /** Painted-wall grain strength for this mural (0 = off). */
+  grain?: number;
+}
+
 export class PackedVideoLayer {
   public readonly mesh: THREE.Mesh;
   public readonly video: HTMLVideoElement;
@@ -41,6 +76,8 @@ export class PackedVideoLayer {
   private config: LayerConfig;
   private targetAspectRatio: number;
   private layerIndex: number;
+  private depthScale: number;
+  private depthTexture: THREE.Texture | null = null;
   private isFallback = false;
   private shouldBePlaying = false;
 
@@ -50,11 +87,19 @@ export class PackedVideoLayer {
    * @param targetAR     Target image aspect ratio (width / height).
    *                     Defaults to 1 (square) if unspecified.
    * @param layerIndex   Index in layer stack for Z-ordering separation.
+   * @param depthOptions Viewing distance and global depth multiplier for parallax.
    */
-  constructor(config: LayerConfig, basePath: string, targetAR = 1, layerIndex = 0) {
+  constructor(
+    config: LayerConfig,
+    basePath: string,
+    targetAR = 1,
+    layerIndex = 0,
+    depthOptions: DepthOptions = {},
+  ) {
     this.config = config;
     this.targetAspectRatio = targetAR;
     this.layerIndex = layerIndex;
+    this.depthScale = depthOptions.depthScale ?? 1;
 
     const fullSrc = `${basePath}/${config.src}`;
 
@@ -96,6 +141,17 @@ export class PackedVideoLayer {
         uAlphaThreshold: { value: alphaThreshold },
         uDefringe: { value: defringe },
         uBlendMode: { value: blendModeVal },
+        uBands: { value: config.packing === 'color-alpha-depth' ? 3 : 2 },
+        uDepthSource: { value: 0 },
+        uDepthMap: { value: null },
+        uViewTan: { value: new THREE.Vector2(0, 0) },
+        uLayerDepth: { value: 0 },
+        uRelief: { value: 0 },
+        uLight: { value: new THREE.Vector3(1, 1, 1) },
+        uGrain: { value: depthOptions.grain ?? 0 },
+        uWallOrigin: { value: new THREE.Vector2(0, 0) },
+        uWallSize: { value: new THREE.Vector2(1, 1) },
+        uGrainScale: { value: GRAIN_SCALE },
       },
       vertexShader,
       fragmentShader,
@@ -110,6 +166,24 @@ export class PackedVideoLayer {
     }
 
     this.material = shaderMaterial;
+
+    // Depth source for per-pixel relief: a packed depth band wins over a separate image.
+    if (config.packing === 'color-alpha-depth') {
+      shaderMaterial.uniforms.uDepthSource.value = 1;
+    } else if (config.depthMap) {
+      this.depthTexture = new THREE.TextureLoader().load(
+        `${basePath}/${config.depthMap}`,
+        () => {
+          shaderMaterial.uniforms.uDepthSource.value = 2;
+        },
+        undefined,
+        (err) => console.warn(`[PackedVideoLayer] Depth map ${config.depthMap} failed to load:`, err),
+      );
+      this.depthTexture.minFilter = THREE.LinearFilter;
+      this.depthTexture.magFilter = THREE.LinearFilter;
+      shaderMaterial.uniforms.uDepthMap.value = this.depthTexture;
+    }
+    this.updateDepthUniforms();
 
     // Plane geometry (1:1 normalized canvas)
     const geometry = new THREE.PlaneGeometry(1, 1);
@@ -231,10 +305,54 @@ export class PackedVideoLayer {
 
     const posX = centerX - 0.5;
     const posY = (0.5 - centerY) / ar;
-    const posZ = this.layerIndex * 0.001;
+    const posZ = this.layerIndex * LAYER_Z_EPSILON;
 
     this.mesh.position.set(posX, posY, posZ);
     this.mesh.rotation.z = -(rotation * Math.PI) / 180;
+
+    if (this.material instanceof THREE.ShaderMaterial) {
+      (this.material.uniforms.uWallOrigin.value as THREE.Vector2).set(posX, posY);
+      (this.material.uniforms.uWallSize.value as THREE.Vector2).set(width, height);
+    }
+  }
+
+  /** Push the layer's depth and relief (scaled by the global depth multiplier) to the shader. */
+  private updateDepthUniforms(): void {
+    if (!(this.material instanceof THREE.ShaderMaterial)) return;
+    const hasDepthSource = this.config.packing === 'color-alpha-depth' || !!this.config.depthMap;
+    const relief = hasDepthSource ? Math.max(this.config.relief ?? DEFAULT_RELIEF, 0) : 0;
+    this.material.uniforms.uLayerDepth.value = Math.max(this.config.depth ?? 0, 0) * this.depthScale;
+    this.material.uniforms.uRelief.value = relief * this.depthScale;
+  }
+
+  /**
+   * Update the parallax offset from the current view direction.
+   *
+   * @param tanX Horizontal view tangent (camera x / camera distance) in anchor space.
+   * @param tanY Vertical view tangent (camera y / camera distance) in anchor space.
+   */
+  public setParallax(tanX: number, tanY: number): void {
+    if (!(this.material instanceof THREE.ShaderMaterial)) return;
+
+    // Content at distance d from the wall appears displaced by -d * tan on the wall,
+    // so we sample the texture at +d * tan (in UV units). Rotate into the layer's
+    // local frame (mesh is rotated by -rotation) and divide by its size.
+    const r = (this.config.rotation * Math.PI) / 180;
+    const localX = tanX * Math.cos(r) - tanY * Math.sin(r);
+    const localY = tanX * Math.sin(r) + tanY * Math.cos(r);
+    (this.material.uniforms.uViewTan.value as THREE.Vector2).set(
+      localX / this.mesh.scale.x,
+      localY / this.mesh.scale.y,
+    );
+  }
+
+  /**
+   * Match the layer to the scene lighting.
+   * @param light Per-channel multiplier (1 = as authored).
+   */
+  public setLight(r: number, g: number, b: number): void {
+    if (!(this.material instanceof THREE.ShaderMaterial)) return;
+    (this.material.uniforms.uLight.value as THREE.Vector3).set(r, g, b);
   }
 
   private async attemptPlay(): Promise<void> {
@@ -294,6 +412,7 @@ export class PackedVideoLayer {
     this.video.load();
 
     this.texture.dispose();
+    this.depthTexture?.dispose();
     this.material.dispose();
     this.mesh.geometry.dispose();
   }

@@ -46,6 +46,54 @@ export interface LayerConfig {
    * Eliminates black halos caused by straight-alpha compression on black canvas.
    */
   defringe?: number;
+
+  /**
+   * Distance the layer floats in front of the wall, in mural widths. Default: 0.
+   * E.g. on a 3 m wide mural, 0.02 = 6 cm. Larger values give stronger parallax.
+   * The layer stays aligned with the artwork when viewed head-on and slides
+   * within its frame as the viewer moves to the side.
+   */
+  depth?: number;
+
+  /**
+   * How the video is packed into vertical bands. Default: 'color-alpha'.
+   * - 'color-alpha':       top half color, bottom half alpha matte.
+   * - 'color-alpha-depth': top third color, middle third alpha matte,
+   *                        bottom third depth map (white = closest).
+   */
+  packing?: 'color-alpha' | 'color-alpha-depth';
+
+  /**
+   * Optional static grayscale depth map image (white = closest), used when the
+   * video has no depth band. Must have the same framing as the layer.
+   */
+  depthMap?: string;
+
+  /**
+   * Extra distance from the wall for the whitest parts of the depth map,
+   * in mural widths. Default: 0.03 when a depth map is present.
+   */
+  relief?: number;
+}
+
+/** How layers blend into the physical wall. */
+export interface WallConfig {
+  /**
+   * Strength of matching the camera's light level and colour cast (0–1). Default: 0.8.
+   * 0 shows the videos exactly as authored.
+   */
+  lightMatch?: number;
+
+  /**
+   * Average colour of the artwork (0–1 sRGB) as it would look under neutral light,
+   * or a single luminance value when only a grayscale reference is known.
+   * Light matching compares what the camera sees on the mural against this.
+   * If omitted, light matching only follows changes after the mural is first found.
+   */
+  reference?: [number, number, number] | number;
+
+  /** Painted-wall grain strength (0–1). Default: 0.12. */
+  grain?: number;
 }
 
 /** Configuration for an entire mural AR experience. */
@@ -67,6 +115,9 @@ export interface MuralConfig {
    * the target geometry so content sticks to the physical artwork.
    */
   aspectRatio?: number;
+
+  /** How layers blend into the physical wall (lighting and texture). */
+  wall?: WallConfig;
 
   /** Ordered list of video layers to composite over the mural. */
   layers: LayerConfig[];

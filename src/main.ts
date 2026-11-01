@@ -17,8 +17,26 @@ import { MuralSelector, type MuralItem } from './ui/MuralSelector';
 import { PackedVideoLayer } from './video/PackedVideoLayer';
 import type { MuralConfig } from './config/types';
 
+/** Default strength of matching layers to the camera's lighting (0–1). */
+const DEFAULT_LIGHT_MATCH = 0.8;
+
+/** Default painted-wall grain strength (0–1). */
+const DEFAULT_WALL_GRAIN = 0.12;
+
 function isBrowserSupported(): boolean {
   return typeof navigator.mediaDevices?.getUserMedia === 'function' && !!window.WebGLRenderingContext;
+}
+
+/**
+ * Optional `?depth=<n>` URL parameter that multiplies every layer's depth.
+ * Lets the parallax strength be tuned in front of the wall without a redeploy
+ * (e.g. ?depth=0 for flat, ?depth=2 for double depth).
+ */
+function getDepthScaleOverride(): number | undefined {
+  const raw = new URLSearchParams(window.location.search).get('depth');
+  if (raw === null) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 /**
@@ -166,6 +184,17 @@ async function main(): Promise<void> {
           overlay.show('tracking-lost');
           currentLayers.forEach((layer) => layer.pause());
         },
+        onViewAngle: (tanX, tanY) => {
+          currentLayers.forEach((layer) => layer.setParallax(tanX, tanY));
+        },
+        onLight: (r, g, b) => {
+          currentLayers.forEach((layer) => layer.setLight(r, g, b));
+        },
+        light: {
+          reference: config.wall?.reference,
+          strength: config.wall?.lightMatch ?? DEFAULT_LIGHT_MATCH,
+        },
+        aspectRatio: config.aspectRatio,
       });
 
       currentEngine = engine;
@@ -173,8 +202,12 @@ async function main(): Promise<void> {
       // Instantiate video layers
       // Pass target aspect ratio so geometry matches the MindAR anchor plane
       const targetAR = config.aspectRatio || 1;
+      const depthOptions = {
+        depthScale: getDepthScaleOverride(),
+        grain: config.wall?.grain ?? DEFAULT_WALL_GRAIN,
+      };
       currentLayers = config.layers.map((layerConfig, index) => {
-        const layer = new PackedVideoLayer(layerConfig, basePath, targetAR, index);
+        const layer = new PackedVideoLayer(layerConfig, basePath, targetAR, index, depthOptions);
         engine.anchorGroup.add(layer.mesh);
         return layer;
       });

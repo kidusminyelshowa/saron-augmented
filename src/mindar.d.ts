@@ -24,6 +24,8 @@ declare module 'mind-ar/dist/mindar-image-three.prod.js' {
     renderer: import('three').WebGLRenderer;
     scene: import('three').Scene;
     camera: import('three').Camera;
+    /** Camera feed element (created by start()). */
+    video?: HTMLVideoElement;
     addAnchor(targetIndex: number): Anchor;
     start(): Promise<void>;
     stop(): void;
