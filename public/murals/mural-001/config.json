@@ -1,7 +1,7 @@
 {
   "id": "mural-001",
   "name": "Alliance Mural",
-  "target": "alliance-tall.mind",
+  "target": "alliance-wall.mind",
   "aspectRatio": 0.61507,
   "layers": [
     {
