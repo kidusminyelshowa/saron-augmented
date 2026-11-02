@@ -53,11 +53,12 @@ export class LightEstimator {
   }
 
   /**
-   * Measure the given region of the camera video and return the smoothed
+   * Measure the given region of the camera video (or a canvas holding a camera frame) and return the smoothed
    * light multiplier, or null if nothing could be measured.
    */
-  sample(video: HTMLVideoElement, rect: VideoRect): [number, number, number] | null {
-    if (!this.ctx || this.strength === 0 || video.readyState < 2) return null;
+  sample(video: HTMLVideoElement | HTMLCanvasElement, rect: VideoRect): [number, number, number] | null {
+    if (!this.ctx || this.strength === 0) return null;
+    if (video instanceof HTMLVideoElement && video.readyState < 2) return null;
     if (rect.width < 4 || rect.height < 4) return null;
 
     let pixels: Uint8ClampedArray;

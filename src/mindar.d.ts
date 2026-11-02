@@ -32,3 +32,20 @@ declare module 'mind-ar/dist/mindar-image-three.prod.js' {
     switchTarget(targetIndex: number): void;
   }
 }
+
+declare module 'mind-ar/dist/mindar-image.prod.js' {
+  /** MindAR image-target controller (detection, matching and tracking on a given input). */
+  export class Controller {
+    constructor(options: {
+      inputWidth: number;
+      inputHeight: number;
+      maxTrack?: number;
+      onUpdate?: (data: unknown) => void;
+      filterMinCF?: number;
+      filterBeta?: number;
+      warmupTolerance?: number;
+      missTolerance?: number;
+    });
+  }
+  export class Compiler {}
+}
