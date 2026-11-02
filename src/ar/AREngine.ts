@@ -11,7 +11,7 @@
 
 import { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js';
 import type { Anchor } from 'mind-ar/dist/mindar-image-three.prod.js';
-import { Vector3 } from 'three';
+import { Group as ThreeGroup, Vector3 } from 'three';
 import { LightEstimator, type LightReference } from './LightEstimator';
 import type { Scene, Camera, WebGLRenderer, Group } from 'three';
 
@@ -51,16 +51,32 @@ export interface AREngineOptions {
   light?: { reference?: LightReference; strength?: number };
   /** Target aspect ratio (width / height), used to locate the mural in the camera image. */
   aspectRatio?: number;
+  /**
+   * Region of the mural each image in the .mind file shows, as normalised
+   * [x, y, width, height] (0..1, top-left origin), in the same order as the
+   * images were compiled. Default: a single target covering the whole mural.
+   * Extra close-up targets let phones without a wide camera lock on from
+   * nearer the wall.
+   */
+  targetRegions?: [number, number, number, number][];
 }
+
+type Region = [number, number, number, number];
 
 export class AREngine {
   public readonly renderer: WebGLRenderer;
   public readonly scene: Scene;
   public readonly camera: Camera;
-  public readonly anchorGroup: Group;
+  /**
+   * Holds all mural content in full-mural anchor space (width 1, height
+   * 1 / aspectRatio). It is moved into whichever target's anchor is tracked.
+   */
+  public readonly contentGroup: Group = new ThreeGroup();
 
   private mindar: InstanceType<typeof MindARThree>;
-  private anchor: Anchor;
+  private anchors: Anchor[] = [];
+  private regions: Region[];
+  private activeAnchor = -1;
   private options: AREngineOptions;
   private smoothTanX = 0;
   private smoothTanY = 0;
@@ -92,21 +108,52 @@ export class AREngine {
     this.scene = this.mindar.scene;
     this.camera = this.mindar.camera;
 
-    // Create an anchor for image target index 0 (the mural)
-    this.anchor = this.mindar.addAnchor(0);
-    this.anchorGroup = this.anchor.group;
+    // One anchor per compiled image: index 0 is the whole mural, any others are close-ups.
+    this.regions = options.targetRegions?.length ? options.targetRegions : [[0, 0, 1, 1]];
+    this.regions.forEach((_, index) => {
+      const anchor = this.mindar.addAnchor(index);
+      anchor.onTargetFound = () => this.handleFound(index);
+      anchor.onTargetLost = () => this.handleLost(index);
+      this.anchors.push(anchor);
+    });
+  }
 
-    // Wire up target events directly on MindAR anchor callbacks
-    this.anchor.onTargetFound = () => {
-      console.log('[AREngine] Target Found');
-      this.snapViewAngle = true;
-      this.options.onTargetFound?.();
-    };
+  /** Group of the anchor currently holding the content (or null when nothing is tracked). */
+  get anchorGroup(): Group | null {
+    return this.activeAnchor >= 0 ? this.anchors[this.activeAnchor].group : null;
+  }
 
-    this.anchor.onTargetLost = () => {
-      console.log('[AREngine] Target Lost');
-      this.options.onTargetLost?.();
-    };
+  private handleFound(index: number): void {
+    console.log(`[AREngine] Target Found (image ${index})`);
+    const wasTracking = this.activeAnchor >= 0;
+    if (index !== this.activeAnchor) {
+      this.attachContent(index);
+    }
+    this.snapViewAngle = true;
+    if (!wasTracking) this.options.onTargetFound?.();
+  }
+
+  private handleLost(index: number): void {
+    console.log(`[AREngine] Target Lost (image ${index})`);
+    if (index !== this.activeAnchor) return;
+    this.activeAnchor = -1;
+    this.options.onTargetLost?.();
+  }
+
+  /**
+   * Move the content into anchor `index`, mapping full-mural space into that
+   * image's anchor space (where the close-up's own width is 1).
+   */
+  private attachContent(index: number): void {
+    const [rx, ry, rw, rh] = this.regions[index];
+    const ar = this.options.aspectRatio || this.detectedAspectRatio || 1;
+    const s = 1 / rw;
+    const cx = rx + rw / 2 - 0.5;
+    const cy = -(ry + rh / 2 - 0.5) / ar;
+    this.contentGroup.position.set(-cx * s, -cy * s, 0);
+    this.contentGroup.scale.setScalar(s);
+    this.anchors[index].group.add(this.contentGroup);
+    this.activeAnchor = index;
   }
 
   /** Dimensions [width, height] of the tracked image target. */
@@ -140,7 +187,8 @@ export class AREngine {
 
   /** Measure scene light where the mural appears in the camera image and report it. */
   private updateLight(time: number): void {
-    if (!this.options.onLight || !this.anchorGroup.visible) return;
+    const anchor = this.anchorGroup;
+    if (!this.options.onLight || !anchor?.visible) return;
     if (time - this.lastLightSample < LIGHT_SAMPLE_INTERVAL) return;
     this.lastLightSample = time;
 
@@ -153,9 +201,9 @@ export class AREngine {
     const hh = (0.5 / ar) * LIGHT_SAMPLE_REGION;
     const canvasRect = this.renderer.domElement.getBoundingClientRect();
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    this.anchorGroup.updateMatrixWorld();
+    anchor.updateMatrixWorld();
     for (const [x, y] of [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]]) {
-      this.corner.set(x, y, 0).applyMatrix4(this.anchorGroup.matrixWorld).project(this.camera);
+      this.corner.set(x, y, 0).applyMatrix4(this.contentGroup.matrixWorld).project(this.camera);
       const px = canvasRect.left + ((this.corner.x + 1) / 2) * canvasRect.width;
       const py = canvasRect.top + ((1 - this.corner.y) / 2) * canvasRect.height;
       minX = Math.min(minX, px); maxX = Math.max(maxX, px);
@@ -180,12 +228,13 @@ export class AREngine {
   private updateViewAngle(time: number): void {
     const dt = this.lastFrameTime ? Math.min((time - this.lastFrameTime) / 1000, 0.1) : 0;
     this.lastFrameTime = time;
-    if (!this.options.onViewAngle || !this.anchorGroup.visible) return;
+    const anchor = this.anchorGroup;
+    if (!this.options.onViewAngle || !anchor?.visible) return;
 
     // Camera position in the mural's local space (mural plane is z = 0, viewer at +z).
-    this.anchorGroup.updateMatrixWorld();
+    anchor.updateMatrixWorld();
     this.camera.getWorldPosition(this.cameraLocal);
-    this.anchorGroup.worldToLocal(this.cameraLocal);
+    this.contentGroup.worldToLocal(this.cameraLocal);
     const { x, y, z } = this.cameraLocal;
     if (z <= 0.01) return;
 

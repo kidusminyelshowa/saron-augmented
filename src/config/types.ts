@@ -116,6 +116,14 @@ export interface MuralConfig {
    */
   aspectRatio?: number;
 
+  /**
+   * Region of the mural shown by each image compiled into the .mind file, as
+   * normalised [x, y, width, height] (0..1, top-left origin), in compile order.
+   * Omit for a single whole-mural target. Extra close-up regions let phones
+   * without a wide camera lock on from nearer the wall.
+   */
+  targetRegions?: [number, number, number, number][];
+
   /** How layers blend into the physical wall (lighting and texture). */
   wall?: WallConfig;
 

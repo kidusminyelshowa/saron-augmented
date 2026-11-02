@@ -195,6 +195,7 @@ async function main(): Promise<void> {
           strength: config.wall?.lightMatch ?? DEFAULT_LIGHT_MATCH,
         },
         aspectRatio: config.aspectRatio,
+        targetRegions: config.targetRegions,
       });
 
       currentEngine = engine;
@@ -208,7 +209,7 @@ async function main(): Promise<void> {
       };
       currentLayers = config.layers.map((layerConfig, index) => {
         const layer = new PackedVideoLayer(layerConfig, basePath, targetAR, index, depthOptions);
-        engine.anchorGroup.add(layer.mesh);
+        engine.contentGroup.add(layer.mesh);
         return layer;
       });
 

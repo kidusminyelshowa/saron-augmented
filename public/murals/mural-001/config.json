@@ -3,6 +3,12 @@
   "name": "Alliance Mural",
   "target": "alliance-wall.mind",
   "aspectRatio": 0.61507,
+  "targetRegions": [
+    [0, 0, 1, 1],
+    [0.20833, 0.12814, 0.66667, 0.61507],
+    [0.29167, 0.35879, 0.54167, 0.38442],
+    [0.35, 0.35879, 0.4, 0.30753]
+  ],
   "layers": [
     {
       "id": "layer-01-background",
