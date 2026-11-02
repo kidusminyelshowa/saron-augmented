@@ -16,8 +16,8 @@ const UPDATE_INTERVAL = 150;
 const FRAME_SIZE = 640;
 /** Longest side of the mask texture. */
 const MASK_SIZE = 256;
-/** A mask older than this (ms) is faded out, so a stalled worker can't leave holes behind. */
-const MASK_MAX_AGE = 4000;
+/** A mask older than this (ms) is dropped, so a stalled worker can't leave holes behind. */
+const MASK_MAX_AGE = 10000;
 
 export interface PeopleMaskOptions {
   detectorModel?: string;
@@ -46,6 +46,8 @@ export class PeopleMask {
   private failed = false;
   /** Log detection results (enable with ?debug=people). */
   private readonly debug = new URLSearchParams(location.search).get('debug') === 'people';
+  /** On-screen status line (only with ?debug=people), so it can be checked on a phone. */
+  private hud: HTMLElement | null = null;
 
   private readonly options: PeopleMaskOptions;
 
@@ -59,7 +61,19 @@ export class PeopleMask {
     this.texture.minFilter = THREE.LinearFilter;
     this.texture.magFilter = THREE.LinearFilter;
     this.texture.generateMipmaps = false;
-    if (this.debug) (window as unknown as { peopleMask: PeopleMask }).peopleMask = this;
+    if (this.debug) {
+      (window as unknown as { peopleMask: PeopleMask }).peopleMask = this;
+      this.hud = document.createElement('div');
+      this.hud.style.cssText =
+        'position:fixed;left:8px;bottom:8px;z-index:9999;padding:4px 8px;border-radius:6px;' +
+        'background:rgba(0,0,0,.7);color:#fff;font:12px/1.4 monospace;pointer-events:none';
+      document.body.appendChild(this.hud);
+      this.status('people: waiting for tracking');
+    }
+  }
+
+  private status(text: string): void {
+    if (this.hud) this.hud.textContent = text;
   }
 
   /** Load the models in the background. Tracking does not wait for this. */
@@ -67,6 +81,7 @@ export class PeopleMask {
     if (this.worker || this.failed) return;
     if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') {
       console.warn('[PeopleMask] OffscreenCanvas not supported; people occlusion disabled');
+      this.status('people: not supported on this browser');
       this.failed = true;
       return;
     }
@@ -74,12 +89,14 @@ export class PeopleMask {
       this.worker = new Worker(new URL('./people.worker.ts', import.meta.url), { type: 'module' });
     } catch (err) {
       console.warn('[PeopleMask] Worker failed to start; people occlusion disabled', err);
+      this.status(`people: worker failed: ${err}`);
       this.failed = true;
       return;
     }
     this.worker.onmessage = (e: MessageEvent<PeopleResponse>) => this.handleMessage(e.data);
     this.worker.onerror = (e) => {
       console.warn('[PeopleMask] Worker error; people occlusion disabled', e.message);
+      this.status(`people: worker error: ${e.message}`);
       this.stop();
       this.failed = true;
     };
@@ -89,10 +106,12 @@ export class PeopleMask {
       segmenterModel: new URL(this.options.segmenterModel ?? '/models/selfie_segmenter.tflite', location.href).href,
     };
     this.worker.postMessage(init);
+    this.status('people: loading models');
   }
 
   stop(): void {
     this.worker?.terminate();
+    this.hud?.remove();
     this.worker = null;
     this.ready = false;
     this.busy = false;
@@ -147,18 +166,23 @@ export class PeopleMask {
   private handleMessage(msg: PeopleResponse): void {
     if (msg.type === 'ready') {
       console.log('[PeopleMask] Ready');
+      this.status('people: ready');
       this.ready = true;
       return;
     }
     if (msg.type === 'error') {
       console.warn('[PeopleMask]', msg.message);
+      this.status(`people: error: ${msg.message}`);
       this.busy = false;
       return;
     }
     this.busy = false;
     this.lastMask = performance.now();
     this.hasPeople = !!msg.mask;
-    if (this.debug) console.log(`[PeopleMask] ${msg.people} people, ${msg.ms.toFixed(0)} ms`);
+    if (this.debug) {
+      console.log(`[PeopleMask] ${msg.people} people, ${msg.ms.toFixed(0)} ms`);
+      this.status(`people: ${msg.people} found, ${msg.ms.toFixed(0)} ms per frame`);
+    }
     if (!msg.mask || !this.ctx) return;
 
     if (this.canvas.width !== msg.mask.width || this.canvas.height !== msg.mask.height) {
