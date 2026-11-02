@@ -39,6 +39,13 @@ function getDepthScaleOverride(): number | undefined {
   return Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
+/** People occlusion is on unless the mural config or `?occlusion=0` turns it off. */
+function isOcclusionEnabled(config: MuralConfig): boolean {
+  const raw = new URLSearchParams(window.location.search).get('occlusion');
+  if (raw !== null) return raw !== '0' && raw !== 'false';
+  return config.wall?.occludePeople ?? true;
+}
+
 /**
  * Prime all video elements for iOS playback.
  * iOS Safari requires video.play() to be called within a user gesture.
@@ -190,6 +197,10 @@ async function main(): Promise<void> {
         onLight: (r, g, b) => {
           currentLayers.forEach((layer) => layer.setLight(r, g, b));
         },
+        onOcclusion: (strength) => {
+          currentLayers.forEach((layer) => layer.setOcclusion(strength));
+        },
+        occludePeople: isOcclusionEnabled(config),
         light: {
           reference: config.wall?.reference,
           strength: config.wall?.lightMatch ?? DEFAULT_LIGHT_MATCH,
@@ -210,6 +221,7 @@ async function main(): Promise<void> {
       currentLayers = config.layers.map((layerConfig, index) => {
         const layer = new PackedVideoLayer(layerConfig, basePath, targetAR, index, depthOptions);
         engine.contentGroup.add(layer.mesh);
+        if (engine.peopleMask) layer.setOccluder(engine.peopleMask.texture, engine.peopleMask.occluderMap);
         return layer;
       });
 

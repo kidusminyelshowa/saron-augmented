@@ -13,6 +13,7 @@ import { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js';
 import type { Anchor } from 'mind-ar/dist/mindar-image-three.prod.js';
 import { Group as ThreeGroup, Vector3 } from 'three';
 import { LightEstimator, type LightReference } from './LightEstimator';
+import { PeopleMask } from './PeopleMask';
 import type { Scene, Camera, WebGLRenderer, Group } from 'three';
 
 /**
@@ -59,6 +60,10 @@ export interface AREngineOptions {
    * nearer the wall.
    */
   targetRegions?: [number, number, number, number][];
+  /** Detect people in the camera image so layers can be hidden behind them. */
+  occludePeople?: boolean;
+  /** Called every frame while tracking with the people-occlusion strength (0 = no one in view). */
+  onOcclusion?: (strength: number) => void;
 }
 
 type Region = [number, number, number, number];
@@ -86,10 +91,13 @@ export class AREngine {
   private readonly corner = new Vector3();
   private lightEstimator: LightEstimator;
   private lastLightSample = 0;
+  /** Person mask for occlusion (null when disabled). Layers read its texture directly. */
+  public readonly peopleMask: PeopleMask | null;
 
   constructor(options: AREngineOptions) {
     this.options = options;
     this.lightEstimator = new LightEstimator(options.light);
+    this.peopleMask = options.occludePeople ? new PeopleMask() : null;
 
     // Initialize MindAR with custom tracking filters for maximum smoothness and stability.
     this.mindar = new MindARThree({
@@ -178,11 +186,23 @@ export class AREngine {
   /** Start the AR session (requests camera, begins tracking). */
   async start(): Promise<void> {
     await this.mindar.start();
+    // Load the people models in the background; tracking starts without them.
+    this.peopleMask?.start();
     this.renderer.setAnimationLoop((time: number) => {
       this.updateViewAngle(time);
       this.updateLight(time);
+      this.updateOcclusion(time);
       this.renderer.render(this.scene, this.camera);
     });
+  }
+
+  /** Keep the people mask fresh while the mural is tracked. */
+  private updateOcclusion(time: number): void {
+    const mask = this.peopleMask;
+    const video = this.mindar.video;
+    if (!mask || !video || !this.anchorGroup?.visible) return;
+    mask.update(time, video, this.renderer.domElement);
+    this.options.onOcclusion?.(mask.strength);
   }
 
   /** Measure scene light where the mural appears in the camera image and report it. */
@@ -258,6 +278,7 @@ export class AREngine {
   /** Stop the AR session and release resources. */
   stop(): void {
     this.renderer.setAnimationLoop(null);
+    this.peopleMask?.dispose();
     this.mindar.stop();
   }
 }
