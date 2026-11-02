@@ -102,17 +102,6 @@ export interface WallConfig {
   occludePeople?: boolean;
 }
 
-/** Settings for the Android scene-tracking mode. */
-export interface XRConfig {
-  /** Physical mural width in metres (needed to place it at real size). */
-  muralWidth: number;
-  /**
-   * The same targets as `target`, compiled from shadow-filtered images
-   * (tools/make_invariant_targets.py), for recognition in harsh sunlight.
-   */
-  invariantTarget?: string;
-}
-
 /** Configuration for an entire mural AR experience. */
 export interface MuralConfig {
   /** Unique mural identifier. */
@@ -143,13 +132,6 @@ export interface MuralConfig {
 
   /** How layers blend into the physical wall (lighting and texture). */
   wall?: WallConfig;
-
-  /**
-   * Android scene-tracking mode (Chrome + ARCore). When set, Android phones
-   * recognise the mural once and ARCore keeps it in place, with depth-based
-   * occlusion. Other browsers use image tracking. Turn off for a visit with ?xr=0.
-   */
-  xr?: XRConfig;
 
   /** Ordered list of video layers to composite over the mural. */
   layers: LayerConfig[];

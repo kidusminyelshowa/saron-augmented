@@ -12,8 +12,7 @@
 //  4. Clean multiply blending for overlay layers (e.g. bubbles)
 //  5. Depth: whole-layer parallax plus per-pixel relief from a depth map
 //  6. Wall look: matching the camera's lighting and adding painted-wall grain
-//  7. Occlusion: hidden where a person (camera mask) or any closer object
-//     (WebXR depth sensing) is in front of the wall
+//  7. People occlusion: hidden where a person stands in front of the wall
 
 uniform sampler2D uTexture;
 uniform float uOpacity;
@@ -41,21 +40,7 @@ uniform sampler2D uOccluder;   // Person mask in camera-video space (white = per
 uniform vec4 uOccluderMap;     // gl_FragCoord.xy * xy + zw = mask UV
 uniform float uOcclusion;      // 0 = off, 1 = fully hide layers behind people
 
-// Depth occlusion (WebXR depth sensing)
-uniform int uDepthMode;            // 0: off, 1: uint16 as two bytes (RG), 2: float32
-uniform sampler2D uSceneDepth;     // Real-world depth from the phone
-uniform mat4 uSceneDepthUv;        // Normalised view coords → depth texture UV
-uniform float uSceneDepthScale;    // Raw value → metres
-uniform vec2 uViewportInv;         // 1 / framebuffer size
-
-varying float vViewDepth;
-
 varying vec2 vUv;
-
-/** Margin (metres) a real surface must be in front of the layer to hide it. */
-const float DEPTH_MARGIN = 0.25;
-/** Width (metres) of the soft transition at an occluder's edge in depth. */
-const float DEPTH_SOFTNESS = 0.35;
 
 const float BAND_INSET = 0.004;
 
@@ -129,20 +114,6 @@ void main() {
     vec2 maskUv = gl_FragCoord.xy * uOccluderMap.xy + uOccluderMap.zw;
     float person = texture2D(uOccluder, clamp(maskUv, 0.0, 1.0)).r;
     alpha *= 1.0 - uOcclusion * smoothstep(0.25, 0.6, person);
-  }
-
-  // Anything measured closer than the wall (a person, a pole, a car) hides the layer.
-  if (uDepthMode != 0) {
-    vec2 viewUv = gl_FragCoord.xy * uViewportInv;
-    viewUv.y = 1.0 - viewUv.y; // normalised view coordinates have a top-left origin
-    vec2 depthUv = (uSceneDepthUv * vec4(viewUv, 0.0, 1.0)).xy;
-    vec4 d = texture2D(uSceneDepth, clamp(depthUv, 0.0, 1.0));
-    float raw = uDepthMode == 1 ? (d.r * 255.0 + d.g * 255.0 * 256.0) : d.r;
-    float sceneDepth = raw * uSceneDepthScale;
-    if (sceneDepth > 0.0) {
-      float inFront = vViewDepth - sceneDepth - DEPTH_MARGIN;
-      alpha *= 1.0 - smoothstep(0.0, DEPTH_SOFTNESS, inFront);
-    }
   }
   if (alpha <= 0.001) {
     discard;

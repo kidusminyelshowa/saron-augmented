@@ -48,17 +48,6 @@ body {
   pointer-events: none;
 }
 
-/* Android ARCore session: the camera is drawn by the system behind the page,
-   so the page (shown as a DOM overlay) must be see-through. */
-html.xr-session,
-html.xr-session body {
-  background: transparent;
-}
-
-html.xr-session #ar-container {
-  display: none;
-}
-
 /* --- Overlay Base --- */
 .ar-overlay {
   position: fixed;

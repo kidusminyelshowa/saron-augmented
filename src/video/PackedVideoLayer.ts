@@ -155,11 +155,6 @@ export class PackedVideoLayer {
         uOccluder: { value: null },
         uOccluderMap: { value: new THREE.Vector4(0, 0, 0, 0) },
         uOcclusion: { value: 0 },
-        uDepthMode: { value: 0 },
-        uSceneDepth: { value: null },
-        uSceneDepthUv: { value: new THREE.Matrix4() },
-        uSceneDepthScale: { value: 0.001 },
-        uViewportInv: { value: new THREE.Vector2(1, 1) },
       },
       vertexShader,
       fragmentShader,
@@ -371,17 +366,6 @@ export class PackedVideoLayer {
     if (!(this.material instanceof THREE.ShaderMaterial)) return;
     this.material.uniforms.uOccluder.value = texture;
     this.material.uniforms.uOccluderMap.value = map;
-  }
-
-  /**
-   * Hide the layer behind real objects using the phone's depth sensing.
-   * The uniforms are shared objects owned by DepthOcclusion, updated per frame.
-   */
-  public setDepthOccluder(uniforms: Record<string, THREE.IUniform>): void {
-    if (!(this.material instanceof THREE.ShaderMaterial)) return;
-    for (const [name, uniform] of Object.entries(uniforms)) {
-      this.material.uniforms[name] = uniform;
-    }
   }
 
   /** Occlusion strength (0 = off). */

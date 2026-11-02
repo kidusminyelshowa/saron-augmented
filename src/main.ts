@@ -12,7 +12,6 @@
 
 import './style.css';
 import { AREngine } from './ar/AREngine';
-import { XREngine } from './xr/XREngine';
 import { Overlay } from './ui/Overlay';
 import { MuralSelector, type MuralItem } from './ui/MuralSelector';
 import { PackedVideoLayer } from './video/PackedVideoLayer';
@@ -45,12 +44,6 @@ function isOcclusionEnabled(config: MuralConfig): boolean {
   const raw = new URLSearchParams(window.location.search).get('occlusion');
   if (raw !== null) return raw !== '0' && raw !== 'false';
   return config.wall?.occludePeople ?? true;
-}
-
-/** The Android scene-tracking mode can be turned off for a visit with `?xr=0`. */
-function isXRAllowed(): boolean {
-  const raw = new URLSearchParams(window.location.search).get('xr');
-  return raw !== '0' && raw !== 'false';
 }
 
 /**
@@ -131,7 +124,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  let currentEngine: AREngine | XREngine | null = null;
+  let currentEngine: AREngine | null = null;
   let currentLayers: PackedVideoLayer[] = [];
   let userHasTapped = false;
 
@@ -176,11 +169,7 @@ async function main(): Promise<void> {
 
     const basePath = `/murals/${muralId}`;
 
-    // Android Chrome with ARCore: scene tracking + depth (checked before the tap,
-    // because starting the session must follow the tap closely).
-    const useXR = !!config.xr && isXRAllowed() && (await XREngine.isSupported());
-
-    // Prompt user tap (needed for camera, video playback on iOS and the AR session)
+    // Prompt user tap on iOS if not tapped yet
     if (!userHasTapped) {
       await waitForUserTap(overlay);
       userHasTapped = true;
@@ -188,74 +177,39 @@ async function main(): Promise<void> {
 
     overlay.show('loading');
 
-    const callbacks = {
-      onTargetFound: () => {
-        console.log(`[MuralAR] Target found for ${muralId}!`);
-        overlay.hide();
-        currentLayers.forEach((layer) => layer.play());
-      },
-      onTargetLost: () => {
-        console.log(`[MuralAR] Target lost for ${muralId}`);
-        overlay.show('tracking-lost');
-        currentLayers.forEach((layer) => layer.pause());
-      },
-      onViewAngle: (tanX: number, tanY: number) => {
-        currentLayers.forEach((layer) => layer.setParallax(tanX, tanY));
-      },
-      onLight: (r: number, g: number, b: number) => {
-        currentLayers.forEach((layer) => layer.setLight(r, g, b));
-      },
-      light: {
-        reference: config.wall?.reference,
-        strength: config.wall?.lightMatch ?? DEFAULT_LIGHT_MATCH,
-      },
-    };
-
     try {
-      let engine: AREngine | XREngine | null = null;
+      const engine = new AREngine({
+        container: container!,
+        targetSrc: `${basePath}/${config.target}`,
+        onTargetFound: () => {
+          console.log(`[MuralAR] Target found for ${muralId}!`);
+          overlay.hide();
+          currentLayers.forEach((layer) => layer.play());
+        },
+        onTargetLost: () => {
+          console.log(`[MuralAR] Target lost for ${muralId}`);
+          overlay.show('tracking-lost');
+          currentLayers.forEach((layer) => layer.pause());
+        },
+        onViewAngle: (tanX, tanY) => {
+          currentLayers.forEach((layer) => layer.setParallax(tanX, tanY));
+        },
+        onLight: (r, g, b) => {
+          currentLayers.forEach((layer) => layer.setLight(r, g, b));
+        },
+        onOcclusion: (strength) => {
+          currentLayers.forEach((layer) => layer.setOcclusion(strength));
+        },
+        occludePeople: isOcclusionEnabled(config),
+        light: {
+          reference: config.wall?.reference,
+          strength: config.wall?.lightMatch ?? DEFAULT_LIGHT_MATCH,
+        },
+        aspectRatio: config.aspectRatio,
+        targetRegions: config.targetRegions,
+      });
 
-      if (useXR) {
-        const xrEngine = new XREngine({
-          ...callbacks,
-          container: container!,
-          targetSrc: `${basePath}/${config.target}`,
-          invariantTargetSrc: config.xr!.invariantTarget ? `${basePath}/${config.xr!.invariantTarget}` : undefined,
-          targetRegions: config.targetRegions,
-          aspectRatio: config.aspectRatio || 1,
-          muralWidth: config.xr!.muralWidth,
-          onEnded: () => {
-            // Left the AR view (e.g. back button): offer to start again.
-            if (currentEngine !== xrEngine) return;
-            currentEngine = null;
-            userHasTapped = false;
-            startMuralSession(activeMuralId);
-          },
-        });
-        try {
-          await xrEngine.start();
-          engine = xrEngine;
-          console.log('[MuralAR] Using ARCore scene tracking');
-        } catch (err) {
-          console.warn('[MuralAR] ARCore session unavailable, using image tracking:', err);
-          xrEngine.stop();
-        }
-      }
-
-      if (!engine) {
-        engine = new AREngine({
-          ...callbacks,
-          container: container!,
-          targetSrc: `${basePath}/${config.target}`,
-          onOcclusion: (strength) => {
-            currentLayers.forEach((layer) => layer.setOcclusion(strength));
-          },
-          occludePeople: isOcclusionEnabled(config),
-          aspectRatio: config.aspectRatio,
-          targetRegions: config.targetRegions,
-        });
-      }
       currentEngine = engine;
-      const activeEngine = engine;
 
       // Instantiate video layers
       // Pass target aspect ratio so geometry matches the MindAR anchor plane
@@ -264,23 +218,20 @@ async function main(): Promise<void> {
         depthScale: getDepthScaleOverride(),
         grain: config.wall?.grain ?? DEFAULT_WALL_GRAIN,
       };
-      const depth = activeEngine instanceof XREngine ? activeEngine.depth : null;
-      const occludeObjects = depth?.available && isOcclusionEnabled(config);
       currentLayers = config.layers.map((layerConfig, index) => {
         const layer = new PackedVideoLayer(layerConfig, basePath, targetAR, index, depthOptions);
-        activeEngine.contentGroup.add(layer.mesh);
-        if (activeEngine.peopleMask) layer.setOccluder(activeEngine.peopleMask.texture, activeEngine.peopleMask.occluderMap);
-        if (depth && occludeObjects) layer.setDepthOccluder(depth.uniforms);
+        engine.contentGroup.add(layer.mesh);
+        if (engine.peopleMask) layer.setOccluder(engine.peopleMask.texture, engine.peopleMask.occluderMap);
         return layer;
       });
 
       primeVideosForIOS(currentLayers);
 
       overlay.show('scanning');
-      if (activeEngine instanceof AREngine) await activeEngine.start();
+      await engine.start();
 
       // Sync layer geometry if detected AR from .mind differs from default
-      const detectedAR = activeEngine.detectedAspectRatio;
+      const detectedAR = engine.detectedAspectRatio;
       if (detectedAR) {
         console.log(`[MuralAR] Target aspect ratio detected: ${detectedAR.toFixed(4)} (config: ${targetAR})`);
         if (!config.aspectRatio) {

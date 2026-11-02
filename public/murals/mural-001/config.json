@@ -9,10 +9,6 @@
     [0.29167, 0.35879, 0.54167, 0.38442],
     [0.35, 0.35879, 0.4, 0.30753]
   ],
-  "xr": {
-    "muralWidth": 6.15,
-    "invariantTarget": "alliance-wall-invariant.mind"
-  },
   "layers": [
     {
       "id": "layer-01-background",
