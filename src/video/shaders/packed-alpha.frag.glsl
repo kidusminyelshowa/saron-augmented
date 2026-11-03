@@ -40,6 +40,10 @@ uniform sampler2D uOccluder;   // Person mask in camera-video space (white = per
 uniform vec4 uOccluderMap;     // gl_FragCoord.xy * xy + zw = mask UV
 uniform float uOcclusion;      // 0 = off, 1 = fully hide layers behind people
 
+// Shadow pass for popped-out layers: draw a soft dark silhouette instead of the colour.
+uniform float uShadow;         // 0 = normal layer, > 0 = shadow opacity
+uniform float uShadowBlur;     // Blur radius in UV units
+
 varying vec2 vUv;
 
 const float BAND_INSET = 0.004;
@@ -89,6 +93,24 @@ void main() {
       float h = sampleDepth(uv);
       uv = vUv + uViewTan * (uLayerDepth + uRelief * h);
     }
+  }
+
+  // Shadow of a popped-out layer: soft silhouette from the alpha band.
+  if (uShadow > 0.0) {
+    float a = 0.0;
+    for (int i = 0; i < 9; i++) {
+      vec2 o = vec2(float(i - (i / 3) * 3) - 1.0, float(i / 3) - 1.0) * uShadowBlur;
+      vec2 s = clamp(vUv + o, 0.001, 0.999);
+      a += smoothstep(uAlphaThreshold, uAlphaThreshold + 0.12, texture2D(uTexture, vec2(s.x, bandV(s.y, 1.0))).r);
+    }
+    a = a / 9.0 * uShadow * uOpacity;
+    if (uOcclusion > 0.0) {
+      vec2 maskUv = gl_FragCoord.xy * uOccluderMap.xy + uOccluderMap.zw;
+      a *= 1.0 - uOcclusion * smoothstep(0.25, 0.6, texture2D(uOccluder, clamp(maskUv, 0.0, 1.0)).r);
+    }
+    if (a < 0.003) discard;
+    gl_FragColor = vec4(0.0, 0.0, 0.0, a);
+    return;
   }
 
   // Clamp UVs to avoid bilinear bleed across band seams or outer borders. Clamping

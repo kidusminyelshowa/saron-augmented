@@ -56,7 +56,9 @@
       "opacity": 1,
       "loop": true,
       "packing": "color-alpha-depth",
-      "relief": 0.06
+      "relief": 0.06,
+      "popOut": 0.06,
+      "popFloat": 0.01
     },
     {
       "id": "layer-05-water",
@@ -80,7 +82,9 @@
       "opacity": 1,
       "loop": true,
       "packing": "color-alpha-depth",
-      "relief": 0.08
+      "relief": 0.08,
+      "popOut": 0.1,
+      "popFloat": 0.015
     }
   ]
 }

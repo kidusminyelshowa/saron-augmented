@@ -56,6 +56,21 @@ const LAYER_Z_EPSILON = 0.001;
 /** Default relief depth (mural widths) for the white end of a layer's depth map. */
 const DEFAULT_RELIEF = 0.03;
 
+/** Default opacity of a popped-out layer's shadow on the wall. */
+const DEFAULT_POP_SHADOW = 0.35;
+
+/**
+ * Shadow offset on the wall per unit of pop-out distance (light from the upper
+ * left, as from a high sun). In mural widths per mural width of pop-out.
+ */
+const POP_SHADOW_OFFSET = new THREE.Vector2(0.35, -0.5);
+
+/** Shadow blur radius in UV units per mural width of pop-out. */
+const POP_SHADOW_BLUR = 0.06;
+
+/** Seconds for one float cycle of a popped-out layer. */
+const POP_FLOAT_PERIOD = 7;
+
 /** Wall grain cells per mural width (roughly hand-sized patches on a 6 m wall). */
 const GRAIN_SCALE = 40;
 
@@ -79,6 +94,9 @@ export class PackedVideoLayer {
   private depthScale: number;
   private depthTexture: THREE.Texture | null = null;
   private isFallback = false;
+  /** Shadow on the wall for a popped-out layer. */
+  private shadowMesh: THREE.Mesh | null = null;
+  private wallZ = 0;
   private shouldBePlaying = false;
 
   /**
@@ -152,6 +170,8 @@ export class PackedVideoLayer {
         uWallOrigin: { value: new THREE.Vector2(0, 0) },
         uWallSize: { value: new THREE.Vector2(1, 1) },
         uGrainScale: { value: GRAIN_SCALE },
+        uShadow: { value: 0 },
+        uShadowBlur: { value: 0 },
         uOccluder: { value: null },
         uOccluderMap: { value: new THREE.Vector4(0, 0, 0, 0) },
         uOcclusion: { value: 0 },
@@ -192,6 +212,26 @@ export class PackedVideoLayer {
     const geometry = new THREE.PlaneGeometry(1, 1);
     this.mesh = new THREE.Mesh(geometry, this.material);
     this.mesh.renderOrder = layerIndex;
+
+    // Popped-out layers stand in front of the wall and cast a soft shadow on it.
+    if ((config.popOut ?? 0) > 0) {
+      const shadowMaterial = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        // Same uniform objects, so light, occlusion and video updates apply to both.
+        uniforms: {
+          ...shaderMaterial.uniforms,
+          uShadow: { value: Math.min(Math.max(config.popShadow ?? DEFAULT_POP_SHADOW, 0), 1) },
+          uShadowBlur: { value: 0 },
+        },
+        vertexShader,
+        fragmentShader,
+      });
+      this.shadowMesh = new THREE.Mesh(geometry, shadowMaterial);
+      this.shadowMesh.renderOrder = layerIndex - 0.5;
+      this.mesh.add(this.shadowMesh);
+      this.mesh.onBeforeRender = () => this.updatePopOut();
+    }
 
     // Apply layer transforms
     this.applyTransforms();
@@ -309,8 +349,9 @@ export class PackedVideoLayer {
     const posX = centerX - 0.5;
     const posY = (0.5 - centerY) / ar;
     const posZ = this.layerIndex * LAYER_Z_EPSILON;
+    this.wallZ = posZ;
 
-    this.mesh.position.set(posX, posY, posZ);
+    this.mesh.position.set(posX, posY, posZ + this.popDistance());
     this.mesh.rotation.z = -(rotation * Math.PI) / 180;
 
     if (this.material instanceof THREE.ShaderMaterial) {
@@ -319,12 +360,35 @@ export class PackedVideoLayer {
     }
   }
 
+  /** Current distance of a popped-out layer in front of the wall (mural widths). */
+  private popDistance(): number {
+    const pop = Math.max(this.config.popOut ?? 0, 0) * this.depthScale;
+    if (pop === 0) return 0;
+    const amp = Math.max(this.config.popFloat ?? 0, 0) * this.depthScale;
+    const t = performance.now() / 1000;
+    return Math.max(pop + amp * Math.sin((2 * Math.PI * t) / POP_FLOAT_PERIOD), 0.001);
+  }
+
+  /** Move a popped-out layer (float) and keep its shadow on the wall, offset by the light. */
+  private updatePopOut(): void {
+    const pop = this.popDistance();
+    this.mesh.position.z = this.wallZ + pop;
+    if (!this.shadowMesh) return;
+    const sx = this.mesh.scale.x || 1;
+    const sy = this.mesh.scale.y || 1;
+    this.shadowMesh.position.set((POP_SHADOW_OFFSET.x * pop) / sx, (POP_SHADOW_OFFSET.y * pop) / sy, -pop + 0.0005);
+    const mat = this.shadowMesh.material as THREE.ShaderMaterial;
+    mat.uniforms.uShadowBlur.value = (POP_SHADOW_BLUR * pop) / Math.max(sx, sy);
+  }
+
   /** Push the layer's depth and relief (scaled by the global depth multiplier) to the shader. */
   private updateDepthUniforms(): void {
     if (!(this.material instanceof THREE.ShaderMaterial)) return;
     const hasDepthSource = this.config.packing === 'color-alpha-depth' || !!this.config.depthMap;
     const relief = hasDepthSource ? Math.max(this.config.relief ?? DEFAULT_RELIEF, 0) : 0;
-    this.material.uniforms.uLayerDepth.value = Math.max(this.config.depth ?? 0, 0) * this.depthScale;
+    // A popped-out layer gets its parallax from its real position instead.
+    const depth = (this.config.popOut ?? 0) > 0 ? 0 : Math.max(this.config.depth ?? 0, 0);
+    this.material.uniforms.uLayerDepth.value = depth * this.depthScale;
     this.material.uniforms.uRelief.value = relief * this.depthScale;
   }
 
@@ -433,6 +497,7 @@ export class PackedVideoLayer {
     this.texture.dispose();
     this.depthTexture?.dispose();
     this.material.dispose();
+    (this.shadowMesh?.material as THREE.Material | undefined)?.dispose();
     this.mesh.geometry.dispose();
   }
 }

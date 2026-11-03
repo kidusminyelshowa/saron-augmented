@@ -74,6 +74,25 @@ export interface LayerConfig {
    * in mural widths. Default: 0.03 when a depth map is present.
    */
   relief?: number;
+
+  /**
+   * Pop the layer out of the wall as a real 3D plane this far in front of it
+   * (mural widths; 0.1 ≈ 0.6 m on a 6 m wall). Unlike `depth`, which shifts
+   * the picture within the wall's outline, a popped-out layer moves in front
+   * of the wall, can reach past its edges at an angle, and casts a shadow on
+   * the wall. Use it for cut-out elements (transparent around them), not
+   * full-canvas layers. `depth` is ignored when this is set.
+   */
+  popOut?: number;
+
+  /** Opacity of a popped-out layer's shadow on the wall (0–1). Default: 0.35. */
+  popShadow?: number;
+
+  /**
+   * Gentle float towards and away from the wall for a popped-out layer
+   * (amplitude in mural widths). Default: 0.
+   */
+  popFloat?: number;
 }
 
 /** How layers blend into the physical wall. */
