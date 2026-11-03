@@ -94,6 +94,12 @@ export interface WallConfig {
 
   /** Painted-wall grain strength (0–1). Default: 0.12. */
   grain?: number;
+
+  /**
+   * Hide the animation where people stand in front of the wall. Default: true.
+   * Can be turned off for a visit with ?occlusion=0.
+   */
+  occludePeople?: boolean;
 }
 
 /** Configuration for an entire mural AR experience. */
@@ -115,6 +121,14 @@ export interface MuralConfig {
    * the target geometry so content sticks to the physical artwork.
    */
   aspectRatio?: number;
+
+  /**
+   * Region of the mural shown by each image compiled into the .mind file, as
+   * normalised [x, y, width, height] (0..1, top-left origin), in compile order.
+   * Omit for a single whole-mural target. Extra close-up regions let phones
+   * without a wide camera lock on from nearer the wall.
+   */
+  targetRegions?: [number, number, number, number][];
 
   /** How layers blend into the physical wall (lighting and texture). */
   wall?: WallConfig;
