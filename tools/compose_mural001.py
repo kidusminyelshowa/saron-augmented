@@ -11,7 +11,10 @@ color/alpha/depth video used by the app.
   background: Layer 1 (static top drips, from the PSD) under bg.webm. The
               PSD's Color Fill 1 (a flat dark red over the whole canvas) is
               left out by default: it made the AR read as a framed box on the
-              wall. The dark red inside the artwork's own shapes stays.
+              wall. The flat dark-red back painted into bg.webm itself is
+              cut out too (cut_flat_back): large, thick areas of the dark red
+              go transparent, while the dark red on the objects (line work,
+              the jug, small enclosed shapes) stays.
               Pass --with-fill for the old boxed look.
   water:      Color Fill 2 (static water body, from the PSD) under water.webm,
               with the PSD's Layer 2 ripple lines on top, given a gentle loop.
@@ -91,6 +94,41 @@ def emit(proc, rgb, a):
     proc.stdin.write((np.clip(frame, 0, 1) * 255 + 0.5).astype(np.uint8).tobytes())
 
 
+# The background's two paint colours (straight RGB, 0..1).
+BG_DARK = np.array([144, 33, 33], np.float32) / 255
+BG_ORANGE = np.array([212, 61, 37], np.float32) / 255
+
+
+def cut_flat_back(rgb: np.ndarray, a: np.ndarray, open_r: int = 6, min_area: int = 4000):
+    """Make the flat dark-red back transparent, keeping dark red on the objects.
+
+    The back is told apart from the objects by shape, not colour (both use the
+    same red): it is the dark red that survives a morphological opening of
+    radius open_r (so it is thicker than any line work) in connected areas of
+    at least min_area px. Small thick areas, like the jug, stay. Anti-aliased
+    edges against the orange fade out by how red they are, so no dark rim is
+    left on the orange shapes.
+    """
+    dist = np.linalg.norm(rgb - BG_DARK, axis=2)
+    dark = ((dist < 0.08) & (a > 0.5)).astype(np.uint8)
+    k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * open_r + 1,) * 2)
+    thick = cv2.morphologyEx(dark, cv2.MORPH_OPEN, k)
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(thick, connectivity=8)
+    keep = np.where(stats[1:, cv2.CC_STAT_AREA] >= min_area)[0] + 1
+    back = np.isin(lab, keep).astype(np.uint8)
+    back = (cv2.dilate(back, k) & dark) | back  # regrow what the opening trimmed
+    rim = (cv2.dilate(back, np.ones((5, 5), np.uint8)) > 0) & (back == 0)
+    axis = BG_ORANGE - BG_DARK
+    t = np.clip(((rgb - BG_DARK) @ axis) / float(axis @ axis), 0, 1)
+    reddish = rim & (dist < 0.25)
+    a = a.copy()
+    rgb = rgb.copy()
+    a[back > 0] = 0
+    a[reddish] *= t[reddish]
+    rgb[reddish] = BG_ORANGE
+    return rgb, a
+
+
 def build_background(psd_dir: str, anim: str, out: str, with_fill: bool = False) -> None:
     top = load(os.path.join(psd_dir, "canvas_Layer 1.png"))
     base_rgb, base_a = top[..., :3], top[..., 3]
@@ -102,7 +140,10 @@ def build_background(psd_dir: str, anim: str, out: str, with_fill: bool = False)
         if i >= FRAMES:
             break
         f = place(f, BG_Y)
-        emit(proc, *over(base_rgb, base_a, f[..., :3], f[..., 3]))
+        rgb, a = over(base_rgb, base_a, f[..., :3], f[..., 3])
+        if not with_fill:
+            rgb, a = cut_flat_back(rgb, a)
+        emit(proc, rgb, a)
     proc.stdin.close()
     proc.wait()
 
