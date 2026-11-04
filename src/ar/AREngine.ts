@@ -13,6 +13,7 @@ import { MindARThree } from 'mind-ar/dist/mindar-image-three.prod.js';
 import type { Anchor } from 'mind-ar/dist/mindar-image-three.prod.js';
 import { Group as ThreeGroup, Vector3 } from 'three';
 import { LightEstimator, type LightReference } from './LightEstimator';
+import { installCameraTuning } from './cameraSetup';
 import type { Scene, Camera, WebGLRenderer, Group } from 'three';
 
 /**
@@ -177,6 +178,7 @@ export class AREngine {
 
   /** Start the AR session (requests camera, begins tracking). */
   async start(): Promise<void> {
+    installCameraTuning();
     await this.mindar.start();
     this.renderer.setAnimationLoop((time: number) => {
       this.updateViewAngle(time);

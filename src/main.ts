@@ -16,6 +16,7 @@ import { Overlay } from './ui/Overlay';
 import { MuralSelector, type MuralItem } from './ui/MuralSelector';
 import { PackedVideoLayer } from './video/PackedVideoLayer';
 import { WaterOverflow } from './video/WaterOverflow';
+import { getCameraInfo } from './ar/cameraSetup';
 import type { MuralConfig } from './config/types';
 
 /** Default strength of matching layers to the camera's lighting (0–1). */
@@ -77,7 +78,26 @@ function waitForUserTap(overlay: Overlay): Promise<void> {
   });
 }
 
+/**
+ * `?debug=1` shows a small readout of the camera in use and how long the
+ * mural took to be found, for diagnosing phones that struggle to detect it.
+ */
+function createDebugReadout(): ((line: string) => void) | null {
+  if (new URLSearchParams(window.location.search).get('debug') !== '1') return null;
+  const el = document.createElement('div');
+  el.style.cssText =
+    'position:fixed;left:8px;right:8px;bottom:8px;z-index:9999;padding:6px 8px;border-radius:6px;' +
+    'background:rgba(0,0,0,.65);color:#fff;font:11px/1.4 monospace;white-space:pre-wrap;pointer-events:none';
+  document.body.appendChild(el);
+  const lines: string[] = [];
+  return (line: string) => {
+    lines.push(line);
+    el.textContent = lines.slice(-6).join('\n');
+  };
+}
+
 async function main(): Promise<void> {
+  const debug = createDebugReadout();
   const overlay = new Overlay();
 
   if (!isBrowserSupported()) {
@@ -174,17 +194,21 @@ async function main(): Promise<void> {
 
     overlay.show('loading');
 
+    let searchStart = performance.now();
     try {
       const engine = new AREngine({
         container: container!,
         targetSrc: `${basePath}/${config.target}`,
         onTargetFound: () => {
           console.log(`[MuralAR] Target found for ${muralId}!`);
+          debug?.(`found after ${((performance.now() - searchStart) / 1000).toFixed(1)}s`);
           overlay.hide();
           currentLayers.forEach((layer) => layer.play());
           currentOverflow?.play();
         },
         onTargetLost: () => {
+          searchStart = performance.now();
+          debug?.('lost, searching');
           console.log(`[MuralAR] Target lost for ${muralId}`);
           overlay.show('tracking-lost');
           currentLayers.forEach((layer) => layer.pause());
@@ -235,6 +259,13 @@ async function main(): Promise<void> {
 
       overlay.show('scanning');
       await engine.start();
+      searchStart = performance.now();
+      const cam = getCameraInfo();
+      debug?.(
+        cam
+          ? `camera: ${cam.label || '?'} ${cam.width}x${cam.height} focus=${cam.focusMode}${cam.switched ? ' (switched to main)' : ''}`
+          : 'camera: unknown',
+      );
 
       // Sync layer geometry if detected AR from .mind differs from default
       const detectedAR = engine.detectedAspectRatio;
