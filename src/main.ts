@@ -237,6 +237,8 @@ async function main(): Promise<void> {
       const depthOptions = {
         depthScale: getDepthScaleOverride(),
         grain: config.wall?.grain ?? DEFAULT_WALL_GRAIN,
+        viewDistance: config.wall?.viewDistance,
+        eyeHeight: config.wall?.eyeHeight,
       };
       currentLayers = config.layers.map((layerConfig, index) => {
         const layer = new PackedVideoLayer(layerConfig, basePath, targetAR, index, depthOptions);

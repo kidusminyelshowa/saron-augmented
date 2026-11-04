@@ -93,6 +93,13 @@ export interface LayerConfig {
    * (amplitude in mural widths). Default: 0.
    */
   popFloat?: number;
+
+  /**
+   * Hide the layer below this row of its frame (0 = top, 1 = bottom), for a
+   * popped-out layer whose painting dips behind a layer that stays on the
+   * wall (e.g. the pot below the water line). Default: no crop.
+   */
+  cropBottom?: number;
 }
 
 /** How layers blend into the physical wall. */
@@ -113,6 +120,18 @@ export interface WallConfig {
 
   /** Painted-wall grain strength (0–1). Default: 0.12. */
   grain?: number;
+
+  /**
+   * Where a typical viewer stands, used to line up layers that stand out
+   * from the wall (popOut): each is shrunk toward this eye point so that from
+   * here it covers exactly the painting it belongs to, and only separates
+   * from it as the viewer moves. In mural widths. Default: 1.5 (≈9 m back
+   * on a 6 m wide mural).
+   */
+  viewDistance?: number;
+
+  /** Viewer eye height above the bottom of the mural, in mural widths. Default: 0.26. */
+  eyeHeight?: number;
 }
 
 /** Configuration for an entire mural AR experience. */

@@ -38,6 +38,9 @@ uniform float uGrainScale;     // Grain cells per mural width
 uniform float uShadow;         // 0 = normal layer, > 0 = shadow opacity
 uniform float uShadowBlur;     // Blur radius in UV units
 
+// Hide the layer below this row (0 = top, 1 = bottom), e.g. where it dips under the water.
+uniform float uCropBottom;
+
 varying vec2 vUv;
 
 const float BAND_INSET = 0.004;
@@ -89,6 +92,9 @@ void main() {
     }
   }
 
+  float crop = 1.0 - smoothstep(uCropBottom - 0.006, uCropBottom, 1.0 - vUv.y);
+  if (crop <= 0.0) discard;
+
   // Shadow of a popped-out layer: soft silhouette from the alpha band.
   if (uShadow > 0.0) {
     float a = 0.0;
@@ -97,7 +103,7 @@ void main() {
       vec2 s = clamp(vUv + o, 0.001, 0.999);
       a += smoothstep(uAlphaThreshold, uAlphaThreshold + 0.12, texture2D(uTexture, vec2(s.x, bandV(s.y, 1.0))).r);
     }
-    a = a / 9.0 * uShadow * uOpacity;
+    a = a / 9.0 * uShadow * uOpacity * crop;
     if (a < 0.003) discard;
     gl_FragColor = vec4(0.0, 0.0, 0.0, a);
     return;
@@ -119,7 +125,7 @@ void main() {
   }
 
   // 2. Smoothly feather the alpha above the noise threshold
-  float alpha = smoothstep(uAlphaThreshold, min(uAlphaThreshold + 0.12, 1.0), rawAlpha) * uOpacity;
+  float alpha = smoothstep(uAlphaThreshold, min(uAlphaThreshold + 0.12, 1.0), rawAlpha) * uOpacity * crop;
   if (alpha <= 0.001) {
     discard;
   }

@@ -77,7 +77,11 @@ export class WaterOverflow {
 
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), this.material);
     // Hinge at the foot of the wall; the plane lies flat out toward the viewer.
-    this.object.position.set(0, -0.5 / aspectRatio - groundOffset, 0);
+    // Starts under the water layer, wherever it stands from the wall.
+    const bottom = source.popOut > 0
+      ? source.mesh.position.y - source.mesh.scale.y / 2 // a popped-out layer is shrunk toward the viewer
+      : -0.5 / aspectRatio;
+    this.object.position.set(0, bottom - groundOffset, source.popOut);
     this.mesh.rotation.x = -Math.PI / 2;
     this.mesh.position.set(0, 0, depth / 2);
     this.mesh.renderOrder = -1;

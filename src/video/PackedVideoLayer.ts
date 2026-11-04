@@ -80,7 +80,14 @@ export interface DepthOptions {
   depthScale?: number;
   /** Painted-wall grain strength for this mural (0 = off). */
   grain?: number;
+  /** Viewer distance from the wall for lining up popped-out layers (mural widths). */
+  viewDistance?: number;
+  /** Viewer eye height above the bottom of the mural (mural widths). */
+  eyeHeight?: number;
 }
+
+const DEFAULT_VIEW_DISTANCE = 1.5;
+const DEFAULT_EYE_HEIGHT = 0.26;
 
 export class PackedVideoLayer {
   public readonly mesh: THREE.Mesh;
@@ -93,6 +100,8 @@ export class PackedVideoLayer {
   private targetAspectRatio: number;
   private layerIndex: number;
   private depthScale: number;
+  private viewDistance: number;
+  private eyeHeight: number;
   private depthTexture: THREE.Texture | null = null;
   private isFallback = false;
   /** Shadow on the wall for a popped-out layer. */
@@ -129,6 +138,8 @@ export class PackedVideoLayer {
     this.targetAspectRatio = targetAR;
     this.layerIndex = layerIndex;
     this.depthScale = depthOptions.depthScale ?? 1;
+    this.viewDistance = Math.max(depthOptions.viewDistance ?? DEFAULT_VIEW_DISTANCE, 0.2);
+    this.eyeHeight = depthOptions.eyeHeight ?? DEFAULT_EYE_HEIGHT;
 
     const fullSrc = `${basePath}/${config.src}`;
 
@@ -183,6 +194,7 @@ export class PackedVideoLayer {
         uGrainScale: { value: GRAIN_SCALE },
         uShadow: { value: 0 },
         uShadowBlur: { value: 0 },
+        uCropBottom: { value: config.cropBottom ?? 2 },
       },
       vertexShader,
       fragmentShader,
@@ -344,20 +356,33 @@ export class PackedVideoLayer {
     const { position, scale, rotation } = this.config;
     const ar = this.targetAspectRatio;
 
-    const width = scale[0];
-    const height = scale[1] / ar;
-
-    this.mesh.scale.set(width, height, 1);
+    let width = scale[0];
+    let height = scale[1] / ar;
 
     // Convert from mural top-left space (0..1) to Three.js center space
     // Center in mural space:
     const centerX = position[0] + scale[0] / 2;
     const centerY = position[1] + scale[1] / 2;
 
-    const posX = centerX - 0.5;
-    const posY = (0.5 - centerY) / ar;
+    let posX = centerX - 0.5;
+    let posY = (0.5 - centerY) / ar;
     const posZ = this.layerIndex * LAYER_Z_EPSILON;
     this.wallZ = posZ;
+
+    // A layer standing out from the wall is shrunk toward the typical viewer's
+    // eye, so from there it exactly covers its painting and only separates
+    // from it (in true 3D) as the viewer moves.
+    const pop = this.basePop();
+    if (pop > 0) {
+      const k = Math.max((this.viewDistance - pop) / this.viewDistance, 0.2);
+      const eyeY = -0.5 / ar + this.eyeHeight;
+      posX *= k;
+      posY = eyeY + (posY - eyeY) * k;
+      width *= k;
+      height *= k;
+    }
+
+    this.mesh.scale.set(width, height, 1);
 
     this.mesh.position.set(posX, posY, posZ + this.popDistance());
     this.mesh.rotation.z = -(rotation * Math.PI) / 180;
@@ -369,8 +394,17 @@ export class PackedVideoLayer {
   }
 
   /** Current distance of a popped-out layer in front of the wall (mural widths). */
+  private basePop(): number {
+    return Math.max(this.config.popOut ?? 0, 0) * this.depthScale;
+  }
+
+  /** How far the layer stands out from the wall, without the float (mural widths). */
+  public get popOut(): number {
+    return this.basePop();
+  }
+
   private popDistance(): number {
-    const pop = Math.max(this.config.popOut ?? 0, 0) * this.depthScale;
+    const pop = this.basePop();
     if (pop === 0) return 0;
     const amp = Math.max(this.config.popFloat ?? 0, 0) * this.depthScale;
     const t = performance.now() / 1000;
