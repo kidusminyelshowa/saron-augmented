@@ -113,12 +113,6 @@ export interface WallConfig {
 
   /** Painted-wall grain strength (0–1). Default: 0.12. */
   grain?: number;
-
-  /**
-   * Hide the animation where people stand in front of the wall. Default: true.
-   * Can be turned off for a visit with ?occlusion=0.
-   */
-  occludePeople?: boolean;
 }
 
 /** Configuration for an entire mural AR experience. */

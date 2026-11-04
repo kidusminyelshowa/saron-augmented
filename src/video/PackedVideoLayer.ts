@@ -172,9 +172,6 @@ export class PackedVideoLayer {
         uGrainScale: { value: GRAIN_SCALE },
         uShadow: { value: 0 },
         uShadowBlur: { value: 0 },
-        uOccluder: { value: null },
-        uOccluderMap: { value: new THREE.Vector4(0, 0, 0, 0) },
-        uOcclusion: { value: 0 },
       },
       vertexShader,
       fragmentShader,
@@ -218,7 +215,7 @@ export class PackedVideoLayer {
       const shadowMaterial = new THREE.ShaderMaterial({
         transparent: true,
         depthWrite: false,
-        // Same uniform objects, so light, occlusion and video updates apply to both.
+        // Same uniform objects, so light and video updates apply to both.
         uniforms: {
           ...shaderMaterial.uniforms,
           uShadow: { value: Math.min(Math.max(config.popShadow ?? DEFAULT_POP_SHADOW, 0), 1) },
@@ -420,22 +417,6 @@ export class PackedVideoLayer {
   public setLight(r: number, g: number, b: number): void {
     if (!(this.material instanceof THREE.ShaderMaterial)) return;
     (this.material.uniforms.uLight.value as THREE.Vector3).set(r, g, b);
-  }
-
-  /**
-   * Hide the layer where people stand in front of the wall.
-   * The texture and mapping are shared objects owned by PeopleMask.
-   */
-  public setOccluder(texture: THREE.Texture, map: THREE.Vector4): void {
-    if (!(this.material instanceof THREE.ShaderMaterial)) return;
-    this.material.uniforms.uOccluder.value = texture;
-    this.material.uniforms.uOccluderMap.value = map;
-  }
-
-  /** Occlusion strength (0 = off). */
-  public setOcclusion(strength: number): void {
-    if (!(this.material instanceof THREE.ShaderMaterial)) return;
-    this.material.uniforms.uOcclusion.value = this.material.uniforms.uOccluder.value ? strength : 0;
   }
 
   private async attemptPlay(): Promise<void> {
