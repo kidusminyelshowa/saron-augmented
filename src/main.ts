@@ -15,6 +15,8 @@ import { AREngine } from './ar/AREngine';
 import { Overlay } from './ui/Overlay';
 import { MuralSelector, type MuralItem } from './ui/MuralSelector';
 import { PackedVideoLayer } from './video/PackedVideoLayer';
+import { WaterOverflow } from './video/WaterOverflow';
+import { getCameraInfo } from './ar/cameraSetup';
 import type { MuralConfig } from './config/types';
 
 /** Default strength of matching layers to the camera's lighting (0–1). */
@@ -37,13 +39,6 @@ function getDepthScaleOverride(): number | undefined {
   if (raw === null) return undefined;
   const value = Number(raw);
   return Number.isFinite(value) && value >= 0 ? value : undefined;
-}
-
-/** People occlusion is on unless the mural config or `?occlusion=0` turns it off. */
-function isOcclusionEnabled(config: MuralConfig): boolean {
-  const raw = new URLSearchParams(window.location.search).get('occlusion');
-  if (raw !== null) return raw !== '0' && raw !== 'false';
-  return config.wall?.occludePeople ?? true;
 }
 
 /**
@@ -83,7 +78,26 @@ function waitForUserTap(overlay: Overlay): Promise<void> {
   });
 }
 
+/**
+ * `?debug=1` shows a small readout of the camera in use and how long the
+ * mural took to be found, for diagnosing phones that struggle to detect it.
+ */
+function createDebugReadout(): ((line: string) => void) | null {
+  if (new URLSearchParams(window.location.search).get('debug') !== '1') return null;
+  const el = document.createElement('div');
+  el.style.cssText =
+    'position:fixed;left:8px;right:8px;bottom:8px;z-index:9999;padding:6px 8px;border-radius:6px;' +
+    'background:rgba(0,0,0,.65);color:#fff;font:11px/1.4 monospace;white-space:pre-wrap;pointer-events:none';
+  document.body.appendChild(el);
+  const lines: string[] = [];
+  return (line: string) => {
+    lines.push(line);
+    el.textContent = lines.slice(-6).join('\n');
+  };
+}
+
 async function main(): Promise<void> {
+  const debug = createDebugReadout();
   const overlay = new Overlay();
 
   if (!isBrowserSupported()) {
@@ -126,6 +140,7 @@ async function main(): Promise<void> {
 
   let currentEngine: AREngine | null = null;
   let currentLayers: PackedVideoLayer[] = [];
+  let currentOverflow: WaterOverflow | null = null;
   let userHasTapped = false;
 
   // Render Mural Selector UI
@@ -147,6 +162,8 @@ async function main(): Promise<void> {
     }
     currentLayers.forEach((layer) => layer.dispose());
     currentLayers = [];
+    currentOverflow?.dispose();
+    currentOverflow = null;
     container!.innerHTML = '';
 
     // Update URL parameter without page reload
@@ -177,30 +194,33 @@ async function main(): Promise<void> {
 
     overlay.show('loading');
 
+    let searchStart = performance.now();
     try {
       const engine = new AREngine({
         container: container!,
         targetSrc: `${basePath}/${config.target}`,
         onTargetFound: () => {
           console.log(`[MuralAR] Target found for ${muralId}!`);
+          debug?.(`found after ${((performance.now() - searchStart) / 1000).toFixed(1)}s`);
           overlay.hide();
           currentLayers.forEach((layer) => layer.play());
+          currentOverflow?.play();
         },
         onTargetLost: () => {
+          searchStart = performance.now();
+          debug?.('lost, searching');
           console.log(`[MuralAR] Target lost for ${muralId}`);
           overlay.show('tracking-lost');
           currentLayers.forEach((layer) => layer.pause());
+          currentOverflow?.pause();
         },
         onViewAngle: (tanX, tanY) => {
           currentLayers.forEach((layer) => layer.setParallax(tanX, tanY));
         },
         onLight: (r, g, b) => {
           currentLayers.forEach((layer) => layer.setLight(r, g, b));
+          currentOverflow?.setLight(r, g, b);
         },
-        onOcclusion: (strength) => {
-          currentLayers.forEach((layer) => layer.setOcclusion(strength));
-        },
-        occludePeople: isOcclusionEnabled(config),
         light: {
           reference: config.wall?.reference,
           strength: config.wall?.lightMatch ?? DEFAULT_LIGHT_MATCH,
@@ -217,18 +237,37 @@ async function main(): Promise<void> {
       const depthOptions = {
         depthScale: getDepthScaleOverride(),
         grain: config.wall?.grain ?? DEFAULT_WALL_GRAIN,
+        viewDistance: config.wall?.viewDistance,
+        eyeHeight: config.wall?.eyeHeight,
       };
       currentLayers = config.layers.map((layerConfig, index) => {
         const layer = new PackedVideoLayer(layerConfig, basePath, targetAR, index, depthOptions);
         engine.contentGroup.add(layer.mesh);
-        if (engine.peopleMask) layer.setOccluder(engine.peopleMask.texture, engine.peopleMask.occluderMap);
         return layer;
       });
+
+      // Water spilling out of the mural onto the ground, so it doesn't read as a framed picture.
+      if (config.overflow) {
+        const source = currentLayers.find((layer) => layer.id === config.overflow!.layer);
+        if (source) {
+          currentOverflow = new WaterOverflow(config.overflow, source, targetAR);
+          engine.contentGroup.add(currentOverflow.object);
+        } else {
+          console.warn(`[MuralAR] Overflow layer ${config.overflow.layer} not found`);
+        }
+      }
 
       primeVideosForIOS(currentLayers);
 
       overlay.show('scanning');
       await engine.start();
+      searchStart = performance.now();
+      const cam = getCameraInfo();
+      debug?.(
+        cam
+          ? `camera: ${cam.label || '?'} ${cam.width}x${cam.height} focus=${cam.focusMode}${cam.switched ? ' (switched to main)' : ''}`
+          : 'camera: unknown',
+      );
 
       // Sync layer geometry if detected AR from .mind differs from default
       const detectedAR = engine.detectedAspectRatio;

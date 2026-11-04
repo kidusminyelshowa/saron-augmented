@@ -74,6 +74,32 @@ export interface LayerConfig {
    * in mural widths. Default: 0.03 when a depth map is present.
    */
   relief?: number;
+
+  /**
+   * Pop the layer out of the wall as a real 3D plane this far in front of it
+   * (mural widths; 0.1 ≈ 0.6 m on a 6 m wall). Unlike `depth`, which shifts
+   * the picture within the wall's outline, a popped-out layer moves in front
+   * of the wall, can reach past its edges at an angle, and casts a shadow on
+   * the wall. Use it for cut-out elements (transparent around them), not
+   * full-canvas layers. `depth` is ignored when this is set.
+   */
+  popOut?: number;
+
+  /** Opacity of a popped-out layer's shadow on the wall (0–1). Default: 0.35. */
+  popShadow?: number;
+
+  /**
+   * Gentle float towards and away from the wall for a popped-out layer
+   * (amplitude in mural widths). Default: 0.
+   */
+  popFloat?: number;
+
+  /**
+   * Hide the layer below this row of its frame (0 = top, 1 = bottom), for a
+   * popped-out layer whose painting dips behind a layer that stays on the
+   * wall (e.g. the pot below the water line). Default: no crop.
+   */
+  cropBottom?: number;
 }
 
 /** How layers blend into the physical wall. */
@@ -96,10 +122,16 @@ export interface WallConfig {
   grain?: number;
 
   /**
-   * Hide the animation where people stand in front of the wall. Default: true.
-   * Can be turned off for a visit with ?occlusion=0.
+   * Where a typical viewer stands, used to line up layers that stand out
+   * from the wall (popOut): each is shrunk toward this eye point so that from
+   * here it covers exactly the painting it belongs to, and only separates
+   * from it as the viewer moves. In mural widths. Default: 1.5 (≈9 m back
+   * on a 6 m wide mural).
    */
-  occludePeople?: boolean;
+  viewDistance?: number;
+
+  /** Viewer eye height above the bottom of the mural, in mural widths. Default: 0.26. */
+  eyeHeight?: number;
 }
 
 /** Configuration for an entire mural AR experience. */
@@ -135,4 +167,39 @@ export interface MuralConfig {
 
   /** Ordered list of video layers to composite over the mural. */
   layers: LayerConfig[];
+
+  /** Water that spills out of the bottom of the mural onto the ground. */
+  overflow?: OverflowConfig;
+}
+
+/**
+ * Water spilling from the mural onto the ground in front of the wall.
+ * Distances are in mural widths (1 = the mural's painted width).
+ */
+export interface OverflowConfig {
+  /** Id of the water layer whose video colours the spill. */
+  layer: string;
+  /** How far out from the wall the spill reaches (default 0.45). */
+  depth?: number;
+  /** How far it fans out past each side of the mural (default 0.12). */
+  spread?: number;
+  /** Gap between the bottom of the mural and the ground (default 0). */
+  groundOffset?: number;
+  /** Seconds of playback before the water starts to spill (default 1.5). */
+  delaySeconds?: number;
+  /** Seconds the spill takes to reach its full extent (default 4). */
+  revealSeconds?: number;
+  /** Opacity of the spilled water (default 0.92). */
+  opacity?: number;
+  /**
+   * Highest row of the water layer the spill reads, 0 = top of the mural,
+   * 1 = bottom (default 0.8: the water body, below the splashes).
+   */
+  sourceTop?: number;
+  /**
+   * Smallest angle (degrees) the camera sees the spill at. When the phone is
+   * near floor level, or tracking puts it there, the spill tips down to keep
+   * this angle instead of vanishing edge-on (default 14).
+   */
+  minViewAngle?: number;
 }

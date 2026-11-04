@@ -12,7 +12,6 @@
 //  4. Clean multiply blending for overlay layers (e.g. bubbles)
 //  5. Depth: whole-layer parallax plus per-pixel relief from a depth map
 //  6. Wall look: matching the camera's lighting and adding painted-wall grain
-//  7. People occlusion: hidden where a person stands in front of the wall
 
 uniform sampler2D uTexture;
 uniform float uOpacity;
@@ -35,10 +34,12 @@ uniform vec2 uWallOrigin;      // Layer centre in wall space (mural widths)
 uniform vec2 uWallSize;        // Layer size in wall space (mural widths)
 uniform float uGrainScale;     // Grain cells per mural width
 
-// People occlusion
-uniform sampler2D uOccluder;   // Person mask in camera-video space (white = person)
-uniform vec4 uOccluderMap;     // gl_FragCoord.xy * xy + zw = mask UV
-uniform float uOcclusion;      // 0 = off, 1 = fully hide layers behind people
+// Shadow pass for popped-out layers: draw a soft dark silhouette instead of the colour.
+uniform float uShadow;         // 0 = normal layer, > 0 = shadow opacity
+uniform float uShadowBlur;     // Blur radius in UV units
+
+// Hide the layer below this row (0 = top, 1 = bottom), e.g. where it dips under the water.
+uniform float uCropBottom;
 
 varying vec2 vUv;
 
@@ -91,6 +92,23 @@ void main() {
     }
   }
 
+  float crop = 1.0 - smoothstep(uCropBottom - 0.006, uCropBottom, 1.0 - vUv.y);
+  if (crop <= 0.0) discard;
+
+  // Shadow of a popped-out layer: soft silhouette from the alpha band.
+  if (uShadow > 0.0) {
+    float a = 0.0;
+    for (int i = 0; i < 9; i++) {
+      vec2 o = vec2(float(i - (i / 3) * 3) - 1.0, float(i / 3) - 1.0) * uShadowBlur;
+      vec2 s = clamp(vUv + o, 0.001, 0.999);
+      a += smoothstep(uAlphaThreshold, uAlphaThreshold + 0.12, texture2D(uTexture, vec2(s.x, bandV(s.y, 1.0))).r);
+    }
+    a = a / 9.0 * uShadow * uOpacity * crop;
+    if (a < 0.003) discard;
+    gl_FragColor = vec4(0.0, 0.0, 0.0, a);
+    return;
+  }
+
   // Clamp UVs to avoid bilinear bleed across band seams or outer borders. Clamping
   // also stretches edge pixels into any area uncovered by the shift, so no blank strip.
   float clampedX = clamp(uv.x, 0.001, 0.999);
@@ -107,14 +125,7 @@ void main() {
   }
 
   // 2. Smoothly feather the alpha above the noise threshold
-  float alpha = smoothstep(uAlphaThreshold, min(uAlphaThreshold + 0.12, 1.0), rawAlpha) * uOpacity;
-
-  // People in front of the wall cover the mural, so they cover the layers too.
-  if (uOcclusion > 0.0) {
-    vec2 maskUv = gl_FragCoord.xy * uOccluderMap.xy + uOccluderMap.zw;
-    float person = texture2D(uOccluder, clamp(maskUv, 0.0, 1.0)).r;
-    alpha *= 1.0 - uOcclusion * smoothstep(0.25, 0.6, person);
-  }
+  float alpha = smoothstep(uAlphaThreshold, min(uAlphaThreshold + 0.12, 1.0), rawAlpha) * uOpacity * crop;
   if (alpha <= 0.001) {
     discard;
   }
