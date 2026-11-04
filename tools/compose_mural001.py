@@ -8,13 +8,11 @@ For each layer it writes an intermediate 2-band (color over alpha) video at
 canvas size, which tools/repack_layer.py then turns into the 3-band
 color/alpha/depth video used by the app.
 
-  background: no longer composed here. The artist dropped the full-canvas
-              dark-red Color Fill 1 because it made the AR read as a framed
-              box on the wall, so the background is the animator's bg.webm on
-              its own (the real wall shows through its gaps):
-                python3 tools/repack_layer.py --src anim/bg.webm --dy 347 \
-                    --radius 0 --out background_AR.mp4
-              build_background() below is kept for the old boxed version.
+  background: Layer 1 (static top drips, from the PSD) under bg.webm. The
+              PSD's Color Fill 1 (a flat dark red over the whole canvas) is
+              left out by default: it made the AR read as a framed box on the
+              wall. The dark red inside the artwork's own shapes stays.
+              Pass --with-fill for the old boxed look.
   water:      Color Fill 2 (static water body, from the PSD) under water.webm,
               with the PSD's Layer 2 ripple lines on top, given a gentle loop.
 
@@ -93,10 +91,12 @@ def emit(proc, rgb, a):
     proc.stdin.write((np.clip(frame, 0, 1) * 255 + 0.5).astype(np.uint8).tobytes())
 
 
-def build_background(psd_dir: str, anim: str, out: str) -> None:
-    fill = load(os.path.join(psd_dir, "canvas_Color Fill 1.png"))
+def build_background(psd_dir: str, anim: str, out: str, with_fill: bool = False) -> None:
     top = load(os.path.join(psd_dir, "canvas_Layer 1.png"))
-    base_rgb, base_a = over(fill[..., :3], fill[..., 3], top[..., :3], top[..., 3])
+    base_rgb, base_a = top[..., :3], top[..., 3]
+    if with_fill:
+        fill = load(os.path.join(psd_dir, "canvas_Color Fill 1.png"))
+        base_rgb, base_a = over(fill[..., :3], fill[..., 3], base_rgb, base_a)
     proc = writer(out)
     for i, f in enumerate(read_rgba(anim)):
         if i >= FRAMES:
@@ -133,8 +133,12 @@ def main() -> None:
     ap.add_argument("--psd-dir", required=True)
     ap.add_argument("--anim-dir", required=True, help="Folder with bg.webm and water.webm")
     ap.add_argument("--out-dir", required=True)
+    ap.add_argument("--with-fill", action="store_true",
+                    help="Keep the flat dark-red Color Fill 1 behind the background")
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
+    build_background(args.psd_dir, os.path.join(args.anim_dir, "bg.webm"),
+                     os.path.join(args.out_dir, "background_canvas.mp4"), args.with_fill)
     build_water(args.psd_dir, os.path.join(args.anim_dir, "water.webm"),
                 os.path.join(args.out_dir, "water_canvas.mp4"))
 
