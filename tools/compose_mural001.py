@@ -8,7 +8,13 @@ For each layer it writes an intermediate 2-band (color over alpha) video at
 canvas size, which tools/repack_layer.py then turns into the 3-band
 color/alpha/depth video used by the app.
 
-  background: Color Fill 1 + Layer 1 (static, from the PSD) under bg.webm.
+  background: no longer composed here. The artist dropped the full-canvas
+              dark-red Color Fill 1 because it made the AR read as a framed
+              box on the wall, so the background is the animator's bg.webm on
+              its own (the real wall shows through its gaps):
+                python3 tools/repack_layer.py --src anim/bg.webm --dy 347 \
+                    --radius 0 --out background_AR.mp4
+              build_background() below is kept for the old boxed version.
   water:      Color Fill 2 (static water body, from the PSD) under water.webm,
               with the PSD's Layer 2 ripple lines on top, given a gentle loop.
 
@@ -129,8 +135,6 @@ def main() -> None:
     ap.add_argument("--out-dir", required=True)
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
-    build_background(args.psd_dir, os.path.join(args.anim_dir, "bg.webm"),
-                     os.path.join(args.out_dir, "background_canvas.mp4"))
     build_water(args.psd_dir, os.path.join(args.anim_dir, "water.webm"),
                 os.path.join(args.out_dir, "water_canvas.mp4"))
 

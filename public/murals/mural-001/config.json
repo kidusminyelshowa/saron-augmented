@@ -86,5 +86,15 @@
       "popOut": 0.1,
       "popFloat": 0.015
     }
-  ]
+  ],
+  "overflow": {
+    "layer": "layer-05-water",
+    "depth": 0.6,
+    "spread": 0.18,
+    "groundOffset": 0,
+    "delaySeconds": 1.5,
+    "revealSeconds": 4,
+    "opacity": 0.92,
+    "sourceTop": 0.8
+  }
 }

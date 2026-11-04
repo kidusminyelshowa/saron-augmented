@@ -148,4 +148,39 @@ export interface MuralConfig {
 
   /** Ordered list of video layers to composite over the mural. */
   layers: LayerConfig[];
+
+  /** Water that spills out of the bottom of the mural onto the ground. */
+  overflow?: OverflowConfig;
+}
+
+/**
+ * Water spilling from the mural onto the ground in front of the wall.
+ * Distances are in mural widths (1 = the mural's painted width).
+ */
+export interface OverflowConfig {
+  /** Id of the water layer whose video colours the spill. */
+  layer: string;
+  /** How far out from the wall the spill reaches (default 0.45). */
+  depth?: number;
+  /** How far it fans out past each side of the mural (default 0.12). */
+  spread?: number;
+  /** Gap between the bottom of the mural and the ground (default 0). */
+  groundOffset?: number;
+  /** Seconds of playback before the water starts to spill (default 1.5). */
+  delaySeconds?: number;
+  /** Seconds the spill takes to reach its full extent (default 4). */
+  revealSeconds?: number;
+  /** Opacity of the spilled water (default 0.92). */
+  opacity?: number;
+  /**
+   * Highest row of the water layer the spill reads, 0 = top of the mural,
+   * 1 = bottom (default 0.8: the water body, below the splashes).
+   */
+  sourceTop?: number;
+  /**
+   * Smallest angle (degrees) the camera sees the spill at. When the phone is
+   * near floor level, or tracking puts it there, the spill tips down to keep
+   * this angle instead of vanishing edge-on (default 14).
+   */
+  minViewAngle?: number;
 }

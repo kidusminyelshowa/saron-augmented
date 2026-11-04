@@ -86,7 +86,8 @@ export class PackedVideoLayer {
   public readonly mesh: THREE.Mesh;
   public readonly video: HTMLVideoElement;
 
-  private texture: THREE.Texture;
+  /** The layer's packed video texture (shared with effects such as the water overflow). */
+  public readonly texture: THREE.Texture;
   private material: THREE.Material;
   private config: LayerConfig;
   private targetAspectRatio: number;
@@ -98,6 +99,16 @@ export class PackedVideoLayer {
   private shadowMesh: THREE.Mesh | null = null;
   private wallZ = 0;
   private shouldBePlaying = false;
+
+  /** The layer's id from the mural config. */
+  public get id(): string {
+    return this.config.id;
+  }
+
+  /** Bands in the packed video: 2 (colour, alpha) or 3 (colour, alpha, depth). */
+  public get bands(): number {
+    return this.config.packing === 'color-alpha-depth' ? 3 : 2;
+  }
 
   /**
    * @param config       Layer configuration (position, scale, blend, etc.)

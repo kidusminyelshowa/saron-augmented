@@ -15,6 +15,7 @@ import { AREngine } from './ar/AREngine';
 import { Overlay } from './ui/Overlay';
 import { MuralSelector, type MuralItem } from './ui/MuralSelector';
 import { PackedVideoLayer } from './video/PackedVideoLayer';
+import { WaterOverflow } from './video/WaterOverflow';
 import type { MuralConfig } from './config/types';
 
 /** Default strength of matching layers to the camera's lighting (0–1). */
@@ -119,6 +120,7 @@ async function main(): Promise<void> {
 
   let currentEngine: AREngine | null = null;
   let currentLayers: PackedVideoLayer[] = [];
+  let currentOverflow: WaterOverflow | null = null;
   let userHasTapped = false;
 
   // Render Mural Selector UI
@@ -140,6 +142,8 @@ async function main(): Promise<void> {
     }
     currentLayers.forEach((layer) => layer.dispose());
     currentLayers = [];
+    currentOverflow?.dispose();
+    currentOverflow = null;
     container!.innerHTML = '';
 
     // Update URL parameter without page reload
@@ -178,17 +182,20 @@ async function main(): Promise<void> {
           console.log(`[MuralAR] Target found for ${muralId}!`);
           overlay.hide();
           currentLayers.forEach((layer) => layer.play());
+          currentOverflow?.play();
         },
         onTargetLost: () => {
           console.log(`[MuralAR] Target lost for ${muralId}`);
           overlay.show('tracking-lost');
           currentLayers.forEach((layer) => layer.pause());
+          currentOverflow?.pause();
         },
         onViewAngle: (tanX, tanY) => {
           currentLayers.forEach((layer) => layer.setParallax(tanX, tanY));
         },
         onLight: (r, g, b) => {
           currentLayers.forEach((layer) => layer.setLight(r, g, b));
+          currentOverflow?.setLight(r, g, b);
         },
         light: {
           reference: config.wall?.reference,
@@ -212,6 +219,17 @@ async function main(): Promise<void> {
         engine.contentGroup.add(layer.mesh);
         return layer;
       });
+
+      // Water spilling out of the mural onto the ground, so it doesn't read as a framed picture.
+      if (config.overflow) {
+        const source = currentLayers.find((layer) => layer.id === config.overflow!.layer);
+        if (source) {
+          currentOverflow = new WaterOverflow(config.overflow, source, targetAR);
+          engine.contentGroup.add(currentOverflow.object);
+        } else {
+          console.warn(`[MuralAR] Overflow layer ${config.overflow.layer} not found`);
+        }
+      }
 
       primeVideosForIOS(currentLayers);
 
