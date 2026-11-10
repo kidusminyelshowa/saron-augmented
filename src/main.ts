@@ -41,6 +41,14 @@ function getDepthScaleOverride(): number | undefined {
   return Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
+/** `?beta=<n>` overrides how quickly tracking catches up on fast moves (for on-site tuning). */
+function getFilterBetaOverride(): number | undefined {
+  const raw = new URLSearchParams(window.location.search).get('beta');
+  if (raw === null) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
 /**
  * Prime all video elements for iOS playback.
  * iOS Safari requires video.play() to be called within a user gesture.
@@ -227,6 +235,7 @@ async function main(): Promise<void> {
         },
         aspectRatio: config.aspectRatio,
         targetRegions: config.targetRegions,
+        filterBeta: getFilterBetaOverride(),
       });
 
       currentEngine = engine;

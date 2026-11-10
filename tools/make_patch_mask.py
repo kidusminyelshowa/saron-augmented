@@ -46,8 +46,9 @@ def main() -> None:
     ap.add_argument('--dir', required=True)
     ap.add_argument('--layers', nargs='+', required=True)
     ap.add_argument('--bands', type=int, default=3)
-    ap.add_argument('--grow', type=int, default=14, help='px to grow the silhouettes by')
-    ap.add_argument('--feather', type=int, default=10, help='px of soft edge')
+    ap.add_argument('--grow', type=int, default=1, help='px to grow the silhouettes by')
+    ap.add_argument('--feather', type=int, default=2, help='px of soft edge')
+    ap.add_argument('--close', type=int, default=0, help='px gaps between shapes to fill (0 = none)')
     ap.add_argument('--out', required=True)
     args = ap.parse_args()
 
@@ -57,11 +58,12 @@ def main() -> None:
             m = alpha > 40
             union = m if union is None else union | m
     mask = union.astype(np.uint8)
-    # Fill small holes and gaps between shapes, then grow.
-    k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k)
-    g = 2 * args.grow + 1
-    mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (g, g)))
+    if args.close > 0:
+        c = 2 * args.close + 1
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (c, c)))
+    if args.grow > 0:
+        g = 2 * args.grow + 1
+        mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (g, g)))
     soft = cv2.GaussianBlur(mask.astype(np.float32), (0, 0), max(args.feather / 2, 0.1))
     # Keep the grown edge at full strength; fade only outside it.
     soft = np.clip(soft * 2, 0, 1)

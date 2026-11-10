@@ -60,7 +60,16 @@ export interface AREngineOptions {
    * nearer the wall.
    */
   targetRegions?: [number, number, number, number][];
+  /**
+   * How quickly tracking catches up when the camera moves (MindAR one-euro
+   * filter beta). Higher = less lag on fast moves; still steady when holding
+   * still. Default: 1000 (MindAR's default).
+   */
+  filterBeta?: number;
 }
+
+/** MindAR's own default; a very low beta makes the content trail the wall on fast moves. */
+const DEFAULT_FILTER_BETA = 1000;
 
 type Region = [number, number, number, number];
 
@@ -99,8 +108,8 @@ export class AREngine {
       uiLoading: 'no',
       uiScanning: 'no',
       uiError: 'no',
-      filterMinCF: 0.001,  // Balanced cutoff frequency: eliminates static jitter without introducing motion lag
-      filterBeta: 0.01,    // Responsive tracking catch-up on movement
+      filterMinCF: 0.001, // Low cutoff when still: no static jitter
+      filterBeta: options.filterBeta ?? DEFAULT_FILTER_BETA, // Fast catch-up when moving, so content doesn't trail the wall
       warmupTolerance: 5,
       missTolerance: 5,
     });
