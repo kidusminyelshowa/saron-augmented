@@ -86,6 +86,10 @@ export interface DepthOptions {
   eyeHeight?: number;
 }
 
+/** A 0–255 RGB triple as a 0–1 colour vector. */
+const rgb255 = (c?: [number, number, number]) =>
+  new THREE.Vector3(...(c ?? [0, 0, 0]).map((v) => v / 255) as [number, number, number]);
+
 const DEFAULT_VIEW_DISTANCE = 1.5;
 const DEFAULT_EYE_HEIGHT = 0.26;
 
@@ -103,6 +107,7 @@ export class PackedVideoLayer {
   private viewDistance: number;
   private eyeHeight: number;
   private depthTexture: THREE.Texture | null = null;
+  private maskTexture: THREE.Texture | null = null;
   private isFallback = false;
   /** Shadow on the wall for a popped-out layer. */
   private shadowMesh: THREE.Mesh | null = null;
@@ -184,6 +189,13 @@ export class PackedVideoLayer {
         uBands: { value: config.packing === 'color-alpha-depth' ? 3 : 2 },
         uDepthSource: { value: 0 },
         uDepthMap: { value: null },
+        uMask: { value: null },
+        uHasMask: { value: 0 },
+        uRecolor: { value: config.recolor ? 1 : 0 },
+        uFromA: { value: rgb255(config.recolor?.from[0]) },
+        uFromB: { value: rgb255(config.recolor?.from[1]) },
+        uToA: { value: rgb255(config.recolor?.to[0]) },
+        uToB: { value: rgb255(config.recolor?.to[1]) },
         uViewTan: { value: new THREE.Vector2(0, 0) },
         uLayerDepth: { value: 0 },
         uRelief: { value: 0 },
@@ -226,6 +238,19 @@ export class PackedVideoLayer {
       this.depthTexture.minFilter = THREE.LinearFilter;
       this.depthTexture.magFilter = THREE.LinearFilter;
       shaderMaterial.uniforms.uDepthMap.value = this.depthTexture;
+    }
+    if (config.mask) {
+      this.maskTexture = new THREE.TextureLoader().load(
+        `${basePath}/${config.mask}`,
+        () => {
+          shaderMaterial.uniforms.uHasMask.value = 1;
+        },
+        undefined,
+        (err) => console.warn(`[PackedVideoLayer] Mask ${config.mask} failed to load:`, err),
+      );
+      this.maskTexture.minFilter = THREE.LinearFilter;
+      this.maskTexture.magFilter = THREE.LinearFilter;
+      shaderMaterial.uniforms.uMask.value = this.maskTexture;
     }
     this.updateDepthUniforms();
 
@@ -523,6 +548,7 @@ export class PackedVideoLayer {
 
     this.texture.dispose();
     this.depthTexture?.dispose();
+    this.maskTexture?.dispose();
     this.material.dispose();
     (this.shadowMesh?.material as THREE.Material | undefined)?.dispose();
     this.mesh.geometry.dispose();

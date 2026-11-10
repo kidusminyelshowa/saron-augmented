@@ -11,6 +11,23 @@
   ],
   "layers": [
     {
+      "id": "layer-01-background",
+      "src": "background_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "depth": 0,
+      "opacity": 1,
+      "loop": true,
+      "packing": "color-alpha-depth",
+      "relief": 0,
+      "mask": "patch-mask.png",
+      "recolor": {
+        "from": [[144, 32, 32], [212, 56, 36]],
+        "to": [[114, 45, 51], [168, 66, 68]]
+      }
+    },
+    {
       "id": "layer-02-logs",
       "src": "logs_AR.mp4",
       "position": [0, 0],

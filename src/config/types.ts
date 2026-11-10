@@ -70,6 +70,26 @@ export interface LayerConfig {
   depthMap?: string;
 
   /**
+   * Optional grayscale mask image with the same framing as the layer
+   * (white = show, black = hide). Used to show the background only as a patch
+   * over the painted figures, so their painted copies on the wall don't show
+   * next to the animated ones while the rest of the real mural stays visible.
+   * See tools/make_patch_mask.py.
+   */
+  mask?: string;
+
+  /**
+   * Remap a two-colour layer onto two other colours (0–255 RGB). Each pixel is
+   * placed on the line between from[0] and from[1] and given the matching mix
+   * of to[0] and to[1]. Used to give the background patch the colours of the
+   * real painted wall, so its edges blend into the paint around it.
+   */
+  recolor?: {
+    from: [[number, number, number], [number, number, number]];
+    to: [[number, number, number], [number, number, number]];
+  };
+
+  /**
    * Extra distance from the wall for the whitest parts of the depth map,
    * in mural widths. Default: 0.03 when a depth map is present.
    */
