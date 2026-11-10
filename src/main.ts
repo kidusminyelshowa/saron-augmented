@@ -106,6 +106,7 @@ function createDebugReadout(): ((line: string) => void) | null {
 
 async function main(): Promise<void> {
   const debug = createDebugReadout();
+  debug?.(`build ${__BUILD_ID__}`);
   const overlay = new Overlay();
 
   if (!isBrowserSupported()) {

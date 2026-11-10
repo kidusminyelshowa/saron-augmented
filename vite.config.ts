@@ -14,4 +14,8 @@ export default defineConfig({
   },
   // Ensure .mind files are served correctly as static assets
   assetsInclude: ['**/*.mind'],
+  define: {
+    // Shown in the ?debug=1 readout, to confirm which build a phone is running.
+    __BUILD_ID__: JSON.stringify((process.env.VERCEL_GIT_COMMIT_SHA ?? 'local').slice(0, 7)),
+  },
 });

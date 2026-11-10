@@ -32,3 +32,6 @@ declare module 'mind-ar/dist/mindar-image-three.prod.js' {
     switchTarget(targetIndex: number): void;
   }
 }
+
+/** Short git commit of this build (see vite.config.ts). */
+declare const __BUILD_ID__: string;
