@@ -199,7 +199,7 @@ async function main(): Promise<void> {
       const engine = new AREngine({
         container: container!,
         targetSrc: `${basePath}/${config.target}`,
-        steady: new URLSearchParams(window.location.search).get('steady') === '1',
+        steady: new URLSearchParams(window.location.search).get('steady') !== '0',
         onTargetFound: () => {
           console.log(`[MuralAR] Target found for ${muralId}!`);
           debug?.(`found after ${((performance.now() - searchStart) / 1000).toFixed(1)}s`);

@@ -2,13 +2,13 @@ import { Matrix4, Quaternion, Vector3 } from 'three';
 import type { Group } from 'three';
 
 /** Below these changes the phone is treated as still (mural widths / degrees). */
-const STILL_MOVE = 0.008;
-const STILL_TURN = 0.8;
+const STILL_MOVE = 0.012;
+const STILL_TURN = 1.2;
 /** Above these the phone is clearly moving and the picture follows quickly. */
-const MOVING_MOVE = 0.025;
-const MOVING_TURN = 2.5;
+const MOVING_MOVE = 0.04;
+const MOVING_TURN = 4;
 /** Time constants (seconds): very slow drift while still, near-instant while moving. */
-const STILL_LAG = 0.6;
+const STILL_LAG = 1.2;
 const MOVING_LAG = 0.04;
 
 const smoothstep = (a: number, b: number, x: number) => {
