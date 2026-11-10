@@ -50,6 +50,17 @@ const DEFAULT_ALPHA_THRESHOLD = 0.06;
 /** Default edge de-fringing strength (un-multiplies black halo at anti-aliased contour edges). */
 const DEFAULT_DEFRINGE = 1.0;
 
+/** Shader uniforms for a layer's wall fit: the inverse of `fit` (wall → frame). */
+function fitUniforms(fit: LayerConfig['fit']): { uFitX: { value: THREE.Vector3 }; uFitY: { value: THREE.Vector3 } } {
+  const [[a, b, c], [d, e, f]] = fit ?? [[1, 0, 0], [0, 1, 0]];
+  const det = a * e - b * d;
+  const ia = e / det, ib = -b / det, id = -d / det, ie = a / det;
+  return {
+    uFitX: { value: new THREE.Vector3(ia, ib, -(ia * c + ib * f)) },
+    uFitY: { value: new THREE.Vector3(id, ie, -(id * c + ie * f)) },
+  };
+}
+
 /** Tiny per-layer Z offset that keeps coplanar layers from z-fighting. */
 const LAYER_Z_EPSILON = 0.001;
 
@@ -196,6 +207,7 @@ export class PackedVideoLayer {
         uShadowBlur: { value: 0 },
         uCropBottom: { value: config.cropBottom ?? 2 },
         uExtendBelow: { value: config.extendBelow ?? 2 },
+        ...fitUniforms(config.fit),
       },
       vertexShader,
       fragmentShader,

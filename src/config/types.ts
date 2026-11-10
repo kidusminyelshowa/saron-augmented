@@ -102,6 +102,15 @@ export interface LayerConfig {
   cropBottom?: number;
 
   /**
+   * Fit the video to the painted wall, as a 2x3 affine matrix
+   * [[a, b, c], [d, e, f]] taking a point of the video frame (x, y from the
+   * top-left, in frame widths / heights) to where it is painted on the wall:
+   * x' = a*x + b*y + c, y' = d*x + e*y + f. Applied inside the layer's frame,
+   * so its edges stay put. Default: identity.
+   */
+  fit?: [[number, number, number], [number, number, number]];
+
+  /**
    * Continue the layer below this row of its frame (0 = top, 1 = bottom) by
    * repeating that row downward. For a popped-out layer whose painting is cut
    * off where it meets a wall layer drawn after it (e.g. a figure standing in
