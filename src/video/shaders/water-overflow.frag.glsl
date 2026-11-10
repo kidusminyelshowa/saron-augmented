@@ -55,13 +55,17 @@ void main() {
   // Outline: fans out past the mural's sides and reaches out with a ragged, drifting front.
   float edgeNoise = valueNoise(vec2(x * 5.0, uTime * 0.12)) * 0.65
                   + valueNoise(vec2(x * 14.0 + 7.0, uTime * 0.25)) * 0.35;
-  float halfW = 0.5 + uSpread * uReveal * smoothstep(0.0, 0.6, t)
-              + 0.03 * (valueNoise(vec2(d * 9.0, uTime * 0.2 + 3.0)) - 0.5);
+  // At the wall the spill is exactly as wide as the mural, with square corners;
+  // it only fans out (and gets a ragged side edge) further from the wall.
+  float fan = smoothstep(0.0, 0.6, t);
+  float halfW = 0.5 + uSpread * uReveal * fan
+              + 0.03 * fan * (valueNoise(vec2(d * 9.0, uTime * 0.2 + 3.0)) - 0.5);
   float side = 1.0 - smoothstep(0.5, 0.5 + uSpread + 0.001, abs(x)); // shorter reach out at the sides
   float reach = uSize.y * uReveal * (0.5 + 0.5 * edgeNoise) * (0.55 + 0.45 * side);
 
   float frontMask = 1.0 - smoothstep(reach - 0.035, reach, d);
-  float sideMask = 1.0 - smoothstep(halfW - 0.03, halfW, abs(x));
+  float soft = mix(0.002, 0.03, fan);
+  float sideMask = 1.0 - smoothstep(halfW - soft, halfW, abs(x));
   float mask = frontMask * sideMask;
   if (mask < 0.003) discard;
 

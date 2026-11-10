@@ -36,7 +36,8 @@
       "packing": "color-alpha-depth",
       "relief": 0,
       "popOut": 0.09,
-      "popShadow": 0.3
+      "popShadow": 0.3,
+      "extendBelow": 0.71
     },
     {
       "id": "layer-04-ensira",
@@ -51,7 +52,7 @@
       "relief": 0,
       "popOut": 0.13,
       "popFloat": 0.01,
-      "cropBottom": 0.725
+      "extendBelow": 0.722
     },
     {
       "id": "layer-05-water",
