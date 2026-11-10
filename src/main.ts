@@ -259,6 +259,15 @@ async function main(): Promise<void> {
 
       primeVideosForIOS(currentLayers);
 
+      // `?patch=1` paints masked patches bright green to check where they sit on the wall.
+      const masked = currentLayers.filter((layer) => layer.maskState !== 'none');
+      if (new URLSearchParams(window.location.search).get('patch') === '1') {
+        masked.forEach((layer) => layer.highlightPatch());
+      }
+      if (debug && masked.length) {
+        setTimeout(() => debug(`patch mask: ${masked.map((l) => `${l.id} ${l.maskState}`).join(', ')}`), 3000);
+      }
+
       overlay.show('scanning');
       await engine.start();
       searchStart = performance.now();

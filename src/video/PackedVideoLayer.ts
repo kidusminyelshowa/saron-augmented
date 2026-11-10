@@ -108,6 +108,8 @@ export class PackedVideoLayer {
   private eyeHeight: number;
   private depthTexture: THREE.Texture | null = null;
   private maskTexture: THREE.Texture | null = null;
+  /** Load state of the layer's mask image, for the debug readout. */
+  public maskState: 'none' | 'loading' | 'loaded' | 'failed' = 'none';
   private isFallback = false;
   /** Shadow on the wall for a popped-out layer. */
   private shadowMesh: THREE.Mesh | null = null;
@@ -240,13 +242,18 @@ export class PackedVideoLayer {
       shaderMaterial.uniforms.uDepthMap.value = this.depthTexture;
     }
     if (config.mask) {
+      this.maskState = 'loading';
       this.maskTexture = new THREE.TextureLoader().load(
         `${basePath}/${config.mask}`,
         () => {
           shaderMaterial.uniforms.uHasMask.value = 1;
+          this.maskState = 'loaded';
         },
         undefined,
-        (err) => console.warn(`[PackedVideoLayer] Mask ${config.mask} failed to load:`, err),
+        (err) => {
+          this.maskState = 'failed';
+          console.warn(`[PackedVideoLayer] Mask ${config.mask} failed to load:`, err);
+        },
       );
       this.maskTexture.minFilter = THREE.LinearFilter;
       this.maskTexture.magFilter = THREE.LinearFilter;
@@ -422,6 +429,18 @@ export class PackedVideoLayer {
   /** Current distance of a popped-out layer in front of the wall (mural widths). */
   private basePop(): number {
     return Math.max(this.config.popOut ?? 0, 0) * this.depthScale;
+  }
+
+  /**
+   * Debug aid: paint the layer flat bright green, so a masked patch shows
+   * exactly where it sits on the wall (`?patch=1`).
+   */
+  public highlightPatch(): void {
+    if (!(this.material instanceof THREE.ShaderMaterial)) return;
+    const u = this.material.uniforms;
+    u.uRecolor.value = 1;
+    (u.uToA.value as THREE.Vector3).set(0, 1, 0.2);
+    (u.uToB.value as THREE.Vector3).set(0, 1, 0.2);
   }
 
   /** How far the layer stands out from the wall, without the float (mural widths). */
