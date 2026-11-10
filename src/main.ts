@@ -41,14 +41,6 @@ function getDepthScaleOverride(): number | undefined {
   return Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
-/** `?beta=<n>` overrides how quickly tracking catches up on fast moves (for on-site tuning). */
-function getFilterBetaOverride(): number | undefined {
-  const raw = new URLSearchParams(window.location.search).get('beta');
-  if (raw === null) return undefined;
-  const value = Number(raw);
-  return Number.isFinite(value) && value >= 0 ? value : undefined;
-}
-
 /**
  * Prime all video elements for iOS playback.
  * iOS Safari requires video.play() to be called within a user gesture.
@@ -106,7 +98,6 @@ function createDebugReadout(): ((line: string) => void) | null {
 
 async function main(): Promise<void> {
   const debug = createDebugReadout();
-  debug?.(`build ${__BUILD_ID__}`);
   const overlay = new Overlay();
 
   if (!isBrowserSupported()) {
@@ -236,7 +227,6 @@ async function main(): Promise<void> {
         },
         aspectRatio: config.aspectRatio,
         targetRegions: config.targetRegions,
-        filterBeta: getFilterBetaOverride(),
       });
 
       currentEngine = engine;
@@ -268,15 +258,6 @@ async function main(): Promise<void> {
       }
 
       primeVideosForIOS(currentLayers);
-
-      // `?patch=1` paints masked patches bright green to check where they sit on the wall.
-      const masked = currentLayers.filter((layer) => layer.maskState !== 'none');
-      if (new URLSearchParams(window.location.search).get('patch') === '1') {
-        masked.forEach((layer) => layer.highlightPatch());
-      }
-      if (debug && masked.length) {
-        setTimeout(() => debug(`patch mask: ${masked.map((l) => `${l.id} ${l.maskState}`).join(', ')}`), 3000);
-      }
 
       overlay.show('scanning');
       await engine.start();

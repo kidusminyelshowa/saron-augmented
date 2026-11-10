@@ -41,26 +41,9 @@ uniform float uShadowBlur;     // Blur radius in UV units
 // Hide the layer below this row (0 = top, 1 = bottom), e.g. where it dips under the water.
 uniform float uCropBottom;
 
-// Repeat this row (0 = top, 1 = bottom) downward to continue a cut-off layer.
-uniform float uExtendBelow;
-
-// Optional static mask in the layer's frame (white = show), e.g. a patch over painted figures.
-uniform sampler2D uMask;
-uniform float uHasMask;
-
-// Two-colour remap (uFromA..uFromB onto uToA..uToB), e.g. to match the painted wall.
-uniform float uRecolor;
-uniform vec3 uFromA;
-uniform vec3 uFromB;
-uniform vec3 uToA;
-uniform vec3 uToB;
-
 varying vec2 vUv;
 
 const float BAND_INSET = 0.004;
-
-// How far below its edge row a layer is continued (fraction of frame height).
-const float EXTEND_LENGTH = 0.08;
 
 // Map a 0..1 coordinate inside a band (0 = top band) to texture V.
 float bandV(float y, float band) {
@@ -109,11 +92,6 @@ void main() {
     }
   }
 
-  // Continue a cut-off layer below its edge row (texture V runs bottom-up), for a
-  // short stretch only, so it stays hidden behind the water and never shows below it.
-  if (1.0 - uv.y > uExtendBelow + EXTEND_LENGTH) discard;
-  uv.y = max(uv.y, 1.0 - uExtendBelow);
-
   float crop = 1.0 - smoothstep(uCropBottom - 0.006, uCropBottom, 1.0 - vUv.y);
   if (crop <= 0.0) discard;
 
@@ -148,9 +126,6 @@ void main() {
 
   // 2. Smoothly feather the alpha above the noise threshold
   float alpha = smoothstep(uAlphaThreshold, min(uAlphaThreshold + 0.12, 1.0), rawAlpha) * uOpacity * crop;
-  if (uHasMask > 0.5) {
-    alpha *= texture2D(uMask, clamp(vUv, 0.001, 0.999)).r;
-  }
   if (alpha <= 0.001) {
     discard;
   }
@@ -161,12 +136,6 @@ void main() {
     // Un-premultiply color that was darkened against black in the video encoder
     vec3 unmultiplied = clamp(rgbSample.rgb / max(rawAlpha, 0.2), 0.0, 1.0);
     cleanRgb = mix(rgbSample.rgb, unmultiplied, uDefringe);
-  }
-
-  if (uRecolor > 0.5) {
-    vec3 axis = uFromB - uFromA;
-    float t = clamp(dot(cleanRgb - uFromA, axis) / max(dot(axis, axis), 1e-5), 0.0, 1.0);
-    cleanRgb = mix(uToA, uToB, t);
   }
 
   // 4. Wall look: grain is fixed to the wall (not the shifted content), then the

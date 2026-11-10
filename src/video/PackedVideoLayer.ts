@@ -86,10 +86,6 @@ export interface DepthOptions {
   eyeHeight?: number;
 }
 
-/** A 0–255 RGB triple as a 0–1 colour vector. */
-const rgb255 = (c?: [number, number, number]) =>
-  new THREE.Vector3(...(c ?? [0, 0, 0]).map((v) => v / 255) as [number, number, number]);
-
 const DEFAULT_VIEW_DISTANCE = 1.5;
 const DEFAULT_EYE_HEIGHT = 0.26;
 
@@ -107,9 +103,6 @@ export class PackedVideoLayer {
   private viewDistance: number;
   private eyeHeight: number;
   private depthTexture: THREE.Texture | null = null;
-  private maskTexture: THREE.Texture | null = null;
-  /** Load state of the layer's mask image, for the debug readout. */
-  public maskState: 'none' | 'loading' | 'loaded' | 'failed' = 'none';
   private isFallback = false;
   /** Shadow on the wall for a popped-out layer. */
   private shadowMesh: THREE.Mesh | null = null;
@@ -191,13 +184,6 @@ export class PackedVideoLayer {
         uBands: { value: config.packing === 'color-alpha-depth' ? 3 : 2 },
         uDepthSource: { value: 0 },
         uDepthMap: { value: null },
-        uMask: { value: null },
-        uHasMask: { value: 0 },
-        uRecolor: { value: config.recolor ? 1 : 0 },
-        uFromA: { value: rgb255(config.recolor?.from[0]) },
-        uFromB: { value: rgb255(config.recolor?.from[1]) },
-        uToA: { value: rgb255(config.recolor?.to[0]) },
-        uToB: { value: rgb255(config.recolor?.to[1]) },
         uViewTan: { value: new THREE.Vector2(0, 0) },
         uLayerDepth: { value: 0 },
         uRelief: { value: 0 },
@@ -209,7 +195,6 @@ export class PackedVideoLayer {
         uShadow: { value: 0 },
         uShadowBlur: { value: 0 },
         uCropBottom: { value: config.cropBottom ?? 2 },
-        uExtendBelow: { value: config.extendBelow ?? 2 },
       },
       vertexShader,
       fragmentShader,
@@ -240,24 +225,6 @@ export class PackedVideoLayer {
       this.depthTexture.minFilter = THREE.LinearFilter;
       this.depthTexture.magFilter = THREE.LinearFilter;
       shaderMaterial.uniforms.uDepthMap.value = this.depthTexture;
-    }
-    if (config.mask) {
-      this.maskState = 'loading';
-      this.maskTexture = new THREE.TextureLoader().load(
-        `${basePath}/${config.mask}`,
-        () => {
-          shaderMaterial.uniforms.uHasMask.value = 1;
-          this.maskState = 'loaded';
-        },
-        undefined,
-        (err) => {
-          this.maskState = 'failed';
-          console.warn(`[PackedVideoLayer] Mask ${config.mask} failed to load:`, err);
-        },
-      );
-      this.maskTexture.minFilter = THREE.LinearFilter;
-      this.maskTexture.magFilter = THREE.LinearFilter;
-      shaderMaterial.uniforms.uMask.value = this.maskTexture;
     }
     this.updateDepthUniforms();
 
@@ -431,18 +398,6 @@ export class PackedVideoLayer {
     return Math.max(this.config.popOut ?? 0, 0) * this.depthScale;
   }
 
-  /**
-   * Debug aid: paint the layer flat bright green, so a masked patch shows
-   * exactly where it sits on the wall (`?patch=1`).
-   */
-  public highlightPatch(): void {
-    if (!(this.material instanceof THREE.ShaderMaterial)) return;
-    const u = this.material.uniforms;
-    u.uRecolor.value = 1;
-    (u.uToA.value as THREE.Vector3).set(0, 1, 0.2);
-    (u.uToB.value as THREE.Vector3).set(0, 1, 0.2);
-  }
-
   /** How far the layer stands out from the wall, without the float (mural widths). */
   public get popOut(): number {
     return this.basePop();
@@ -567,7 +522,6 @@ export class PackedVideoLayer {
 
     this.texture.dispose();
     this.depthTexture?.dispose();
-    this.maskTexture?.dispose();
     this.material.dispose();
     (this.shadowMesh?.material as THREE.Material | undefined)?.dispose();
     this.mesh.geometry.dispose();

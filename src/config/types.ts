@@ -70,26 +70,6 @@ export interface LayerConfig {
   depthMap?: string;
 
   /**
-   * Optional grayscale mask image with the same framing as the layer
-   * (white = show, black = hide). Used to show the background only as a patch
-   * over the painted figures, so their painted copies on the wall don't show
-   * next to the animated ones while the rest of the real mural stays visible.
-   * See tools/make_patch_mask.py.
-   */
-  mask?: string;
-
-  /**
-   * Remap a two-colour layer onto two other colours (0–255 RGB). Each pixel is
-   * placed on the line between from[0] and from[1] and given the matching mix
-   * of to[0] and to[1]. Used to give the background patch the colours of the
-   * real painted wall, so its edges blend into the paint around it.
-   */
-  recolor?: {
-    from: [[number, number, number], [number, number, number]];
-    to: [[number, number, number], [number, number, number]];
-  };
-
-  /**
    * Extra distance from the wall for the whitest parts of the depth map,
    * in mural widths. Default: 0.03 when a depth map is present.
    */
@@ -120,16 +100,6 @@ export interface LayerConfig {
    * wall (e.g. the pot below the water line). Default: no crop.
    */
   cropBottom?: number;
-
-  /**
-   * Continue the layer below this row of its frame (0 = top, 1 = bottom) by
-   * repeating that row downward. For a popped-out layer whose painting is cut
-   * off where it meets a wall layer drawn after it (e.g. a figure standing in
-   * the water): seen from off-axis, the pop-out lifts the cut edge off the
-   * water, and the continuation fills that gap instead of showing the wall.
-   * Default: off.
-   */
-  extendBelow?: number;
 }
 
 /** How layers blend into the physical wall. */
