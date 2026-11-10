@@ -41,9 +41,15 @@ uniform float uShadowBlur;     // Blur radius in UV units
 // Hide the layer below this row (0 = top, 1 = bottom), e.g. where it dips under the water.
 uniform float uCropBottom;
 
+// Repeat this row (0 = top, 1 = bottom) downward to continue a cut-off layer.
+uniform float uExtendBelow;
+
 varying vec2 vUv;
 
 const float BAND_INSET = 0.004;
+
+// How far below its edge row a layer is continued (fraction of frame height).
+const float EXTEND_LENGTH = 0.08;
 
 // Map a 0..1 coordinate inside a band (0 = top band) to texture V.
 float bandV(float y, float band) {
@@ -91,6 +97,11 @@ void main() {
       uv = vUv + uViewTan * (uLayerDepth + uRelief * h);
     }
   }
+
+  // Continue a cut-off layer below its edge row (texture V runs bottom-up), for a
+  // short stretch only, so it stays hidden behind the water and never shows below it.
+  if (1.0 - uv.y > uExtendBelow + EXTEND_LENGTH) discard;
+  uv.y = max(uv.y, 1.0 - uExtendBelow);
 
   float crop = 1.0 - smoothstep(uCropBottom - 0.006, uCropBottom, 1.0 - vUv.y);
   if (crop <= 0.0) discard;
