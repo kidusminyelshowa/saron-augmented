@@ -11,8 +11,8 @@
   ],
   "layers": [
     {
-      "id": "layer-01-patch",
-      "src": "patch_AR.mp4",
+      "id": "layer-01-background",
+      "src": "background_still_AR.mp4",
       "position": [0, 0],
       "scale": [1, 1],
       "rotation": 0,
@@ -21,7 +21,6 @@
       "loop": true,
       "packing": "color-alpha-depth",
       "relief": 0,
-      "mask": "patch-mask.png",
       "recolor": {
         "from": [[144, 32, 32], [212, 56, 36]],
         "to": [[114, 45, 51], [168, 66, 68]]
