@@ -14,6 +14,7 @@ import type { Anchor } from 'mind-ar/dist/mindar-image-three.prod.js';
 import { Group as ThreeGroup, Vector3 } from 'three';
 import { LightEstimator, type LightReference } from './LightEstimator';
 import { installCameraTuning } from './cameraSetup';
+import { PoseSteadier } from './PoseSteadier';
 import type { Scene, Camera, WebGLRenderer, Group } from 'three';
 
 /**
@@ -60,6 +61,8 @@ export interface AREngineOptions {
    * nearer the wall.
    */
   targetRegions?: [number, number, number, number][];
+  /** Hold the picture still while the phone is roughly still (extra steadying on top of MindAR). */
+  steady?: boolean;
 }
 
 type Region = [number, number, number, number];
@@ -86,6 +89,8 @@ export class AREngine {
   private readonly cameraLocal = new Vector3();
   private readonly corner = new Vector3();
   private lightEstimator: LightEstimator;
+  private steadiers: PoseSteadier[] = [];
+  private lastSteadyTime = 0;
   private lastLightSample = 0;
 
   constructor(options: AREngineOptions) {
@@ -116,6 +121,7 @@ export class AREngine {
       anchor.onTargetFound = () => this.handleFound(index);
       anchor.onTargetLost = () => this.handleLost(index);
       this.anchors.push(anchor);
+      this.steadiers.push(new PoseSteadier());
     });
   }
 
@@ -131,6 +137,7 @@ export class AREngine {
       this.attachContent(index);
     }
     this.snapViewAngle = true;
+    this.steadiers[index]?.reset();
     if (!wasTracking) this.options.onTargetFound?.();
   }
 
@@ -181,10 +188,19 @@ export class AREngine {
     installCameraTuning();
     await this.mindar.start();
     this.renderer.setAnimationLoop((time: number) => {
+      this.steadyPose(time);
       this.updateViewAngle(time);
       this.updateLight(time);
       this.renderer.render(this.scene, this.camera);
     });
+  }
+
+  /** Filter the anchors' poses so tracker jitter doesn't shake the picture. */
+  private steadyPose(time: number): void {
+    const dt = this.lastSteadyTime ? Math.min((time - this.lastSteadyTime) / 1000, 0.1) : 0;
+    this.lastSteadyTime = time;
+    if (!this.options.steady) return;
+    this.anchors.forEach((anchor, i) => this.steadiers[i].update(anchor.group, dt));
   }
 
   /** Measure scene light where the mural appears in the camera image and report it. */
