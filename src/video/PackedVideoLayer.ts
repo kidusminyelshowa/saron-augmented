@@ -195,7 +195,6 @@ export class PackedVideoLayer {
         uShadow: { value: 0 },
         uShadowBlur: { value: 0 },
         uCropBottom: { value: config.cropBottom ?? 2 },
-        uExtendBelow: { value: config.extendBelow ?? 2 },
       },
       vertexShader,
       fragmentShader,

@@ -11,6 +11,30 @@
   ],
   "layers": [
     {
+      "id": "layer-01-background",
+      "src": "background_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "depth": 0,
+      "opacity": 1,
+      "loop": true,
+      "packing": "color-alpha-depth",
+      "relief": 0
+    },
+    {
+      "id": "layer-05-water",
+      "src": "water_AR.mp4",
+      "position": [0, 0],
+      "scale": [1, 1],
+      "rotation": 0,
+      "depth": 0,
+      "opacity": 1,
+      "loop": true,
+      "packing": "color-alpha-depth",
+      "relief": 0
+    },
+    {
       "id": "layer-02-logs",
       "src": "logs_AR.mp4",
       "position": [0, 0],
@@ -36,8 +60,7 @@
       "packing": "color-alpha-depth",
       "relief": 0,
       "popOut": 0.09,
-      "popShadow": 0.3,
-      "extendBelow": 0.71
+      "popShadow": 0.3
     },
     {
       "id": "layer-04-ensira",
@@ -52,19 +75,7 @@
       "relief": 0,
       "popOut": 0.13,
       "popFloat": 0.01,
-      "extendBelow": 0.722
-    },
-    {
-      "id": "layer-05-water",
-      "src": "water_AR.mp4",
-      "position": [0, 0],
-      "scale": [1, 1],
-      "rotation": 0,
-      "depth": 0,
-      "opacity": 1,
-      "loop": true,
-      "packing": "color-alpha-depth",
-      "relief": 0
+      "cropBottom": 0.725
     },
     {
       "id": "layer-06-hand",

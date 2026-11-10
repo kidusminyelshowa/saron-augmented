@@ -100,16 +100,6 @@ export interface LayerConfig {
    * wall (e.g. the pot below the water line). Default: no crop.
    */
   cropBottom?: number;
-
-  /**
-   * Continue the layer below this row of its frame (0 = top, 1 = bottom) by
-   * repeating that row downward. For a popped-out layer whose painting is cut
-   * off where it meets a wall layer drawn after it (e.g. a figure standing in
-   * the water): seen from off-axis, the pop-out lifts the cut edge off the
-   * water, and the continuation fills that gap instead of showing the wall.
-   * Default: off.
-   */
-  extendBelow?: number;
 }
 
 /** How layers blend into the physical wall. */
