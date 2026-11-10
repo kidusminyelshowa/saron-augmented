@@ -11,8 +11,8 @@
   ],
   "layers": [
     {
-      "id": "layer-01-background",
-      "src": "background_AR.mp4",
+      "id": "layer-01-patch",
+      "src": "patch_AR.mp4",
       "position": [0, 0],
       "scale": [1, 1],
       "rotation": 0,
