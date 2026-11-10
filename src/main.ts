@@ -250,6 +250,13 @@ async function main(): Promise<void> {
         viewDistance: config.wall?.viewDistance,
         eyeHeight: config.wall?.eyeHeight,
       };
+      // `?mask=wide` swaps in a patch with a much larger margin, so small tracking
+      // errors on camera moves never uncover the painted figures (for comparing on site).
+      if (new URLSearchParams(window.location.search).get('mask') === 'wide') {
+        config.layers.forEach((l) => {
+          if (l.mask) l.mask = l.mask.replace(/\.png$/, '-wide.png');
+        });
+      }
       currentLayers = config.layers.map((layerConfig, index) => {
         const layer = new PackedVideoLayer(layerConfig, basePath, targetAR, index, depthOptions);
         engine.contentGroup.add(layer.mesh);
