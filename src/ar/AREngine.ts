@@ -105,7 +105,9 @@ export class AREngine {
       uiScanning: 'no',
       uiError: 'no',
       filterMinCF: 0.001,  // Balanced cutoff frequency: eliminates static jitter without introducing motion lag
-      filterBeta: 0.01,    // Responsive tracking catch-up on movement
+      // With our own steadying on, let MindAR follow fast moves almost at once
+      // (the steadier holds the picture still); otherwise keep the old heavy smoothing.
+      filterBeta: options.steady ? 1000 : 0.01,
       warmupTolerance: 5,
       missTolerance: 5,
     });

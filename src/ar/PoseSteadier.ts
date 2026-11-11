@@ -9,7 +9,7 @@ const MOVING_MOVE = 0.04;
 const MOVING_TURN = 4;
 /** Time constants (seconds): very slow drift while still, near-instant while moving. */
 const STILL_LAG = 1.2;
-const MOVING_LAG = 0.04;
+const MOVING_LAG = 0.02;
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
