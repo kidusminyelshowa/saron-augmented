@@ -32,13 +32,11 @@
       "scale": [1, 1],
       "rotation": 0,
       "fit": [[1.0083, -0.0, -0.0153], [0.0, 1.0185, -0.009]],
-      "depth": 0.06,
+      "depth": 0,
       "opacity": 1,
       "loop": true,
       "packing": "color-alpha-depth",
       "relief": 0,
-      "popOut": 0.09,
-      "popShadow": 0.3,
       "extendBelow": 0.71
     },
     {
