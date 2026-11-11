@@ -41,9 +41,20 @@ uniform float uShadowBlur;     // Blur radius in UV units
 // Hide the layer below this row (0 = top, 1 = bottom), e.g. where it dips under the water.
 uniform float uCropBottom;
 
+// Repeat this row (0 = top, 1 = bottom) downward to continue a cut-off layer.
+uniform float uExtendBelow;
+
+// Fit to the painted wall: maps a wall position (x, y from the top-left, in frame
+// widths/heights) to where that point is in this layer's video frame.
+uniform vec3 uFitX;
+uniform vec3 uFitY;
+
 varying vec2 vUv;
 
 const float BAND_INSET = 0.004;
+
+// How far below its edge row a layer is continued (fraction of frame height).
+const float EXTEND_LENGTH = 0.08;
 
 // Map a 0..1 coordinate inside a band (0 = top band) to texture V.
 float bandV(float y, float band) {
@@ -82,17 +93,25 @@ float wallGrain(vec2 wallPos) {
 }
 
 void main() {
+  vec3 wallXY = vec3(vUv.x, 1.0 - vUv.y, 1.0);
+  vec2 baseUv = vec2(dot(uFitX, wallXY), 1.0 - dot(uFitY, wallXY));
+
   // Parallax: content at distance d from the wall appears shifted by d * view tangent.
   // With a depth map, iterate a few times so each pixel uses its own depth.
-  vec2 uv = vUv + uViewTan * uLayerDepth;
+  vec2 uv = baseUv + uViewTan * uLayerDepth;
   if (uDepthSource != 0 && uRelief > 0.0) {
     for (int i = 0; i < 4; i++) {
       float h = sampleDepth(uv);
-      uv = vUv + uViewTan * (uLayerDepth + uRelief * h);
+      uv = baseUv + uViewTan * (uLayerDepth + uRelief * h);
     }
   }
 
-  float crop = 1.0 - smoothstep(uCropBottom - 0.006, uCropBottom, 1.0 - vUv.y);
+  // Continue a cut-off layer below its edge row (texture V runs bottom-up), for a
+  // short stretch only, so it stays hidden behind the water and never shows below it.
+  if (1.0 - uv.y > uExtendBelow + EXTEND_LENGTH) discard;
+  uv.y = max(uv.y, 1.0 - uExtendBelow);
+
+  float crop = 1.0 - smoothstep(uCropBottom - 0.006, uCropBottom, 1.0 - baseUv.y);
   if (crop <= 0.0) discard;
 
   // Shadow of a popped-out layer: soft silhouette from the alpha band.
@@ -100,7 +119,7 @@ void main() {
     float a = 0.0;
     for (int i = 0; i < 9; i++) {
       vec2 o = vec2(float(i - (i / 3) * 3) - 1.0, float(i / 3) - 1.0) * uShadowBlur;
-      vec2 s = clamp(vUv + o, 0.001, 0.999);
+      vec2 s = clamp(baseUv + o, 0.001, 0.999);
       a += smoothstep(uAlphaThreshold, uAlphaThreshold + 0.12, texture2D(uTexture, vec2(s.x, bandV(s.y, 1.0))).r);
     }
     a = a / 9.0 * uShadow * uOpacity * crop;

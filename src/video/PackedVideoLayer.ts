@@ -50,6 +50,29 @@ const DEFAULT_ALPHA_THRESHOLD = 0.06;
 /** Default edge de-fringing strength (un-multiplies black halo at anti-aliased contour edges). */
 const DEFAULT_DEFRINGE = 1.0;
 
+/** The layer's wall fit with its `grow` enlargement applied on top. */
+function grownFit(config: LayerConfig): LayerConfig['fit'] {
+  const [[a, b, c], [d, e, f]] = config.fit ?? [[1, 0, 0], [0, 1, 0]];
+  const override = config.grow !== undefined ? Number(new URLSearchParams(window.location.search).get('grow')) : NaN;
+  const k = override > 0 ? override : config.grow ?? 1;
+  const [ax, ay] = config.growAnchor ?? [0.5, 0.5];
+  return [
+    [k * a, k * b, k * c + (1 - k) * ax],
+    [k * d, k * e, k * f + (1 - k) * ay],
+  ];
+}
+
+/** Shader uniforms for a layer's wall fit: the inverse of `fit` (wall → frame). */
+function fitUniforms(fit: LayerConfig['fit']): { uFitX: { value: THREE.Vector3 }; uFitY: { value: THREE.Vector3 } } {
+  const [[a, b, c], [d, e, f]] = fit ?? [[1, 0, 0], [0, 1, 0]];
+  const det = a * e - b * d;
+  const ia = e / det, ib = -b / det, id = -d / det, ie = a / det;
+  return {
+    uFitX: { value: new THREE.Vector3(ia, ib, -(ia * c + ib * f)) },
+    uFitY: { value: new THREE.Vector3(id, ie, -(id * c + ie * f)) },
+  };
+}
+
 /** Tiny per-layer Z offset that keeps coplanar layers from z-fighting. */
 const LAYER_Z_EPSILON = 0.001;
 
@@ -195,6 +218,8 @@ export class PackedVideoLayer {
         uShadow: { value: 0 },
         uShadowBlur: { value: 0 },
         uCropBottom: { value: config.cropBottom ?? 2 },
+        uExtendBelow: { value: config.extendBelow ?? 2 },
+        ...fitUniforms(grownFit(config)),
       },
       vertexShader,
       fragmentShader,

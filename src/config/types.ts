@@ -100,6 +100,33 @@ export interface LayerConfig {
    * wall (e.g. the pot below the water line). Default: no crop.
    */
   cropBottom?: number;
+
+  /**
+   * Fit the video to the painted wall, as a 2x3 affine matrix
+   * [[a, b, c], [d, e, f]] taking a point of the video frame (x, y from the
+   * top-left, in frame widths / heights) to where it is painted on the wall:
+   * x' = a*x + b*y + c, y' = d*x + e*y + f. Applied inside the layer's frame,
+   * so its edges stay put. Default: identity.
+   */
+  fit?: [[number, number, number], [number, number, number]];
+
+  /**
+   * Enlarge the layer around `growAnchor` (x, y in frame widths/heights from the
+   * top-left), e.g. 1.03 = 3% bigger, so it fully covers the painted figure
+   * underneath. `?grow=<n>` overrides it for on-site tuning. Default: 1.
+   */
+  grow?: number;
+  growAnchor?: [number, number];
+
+  /**
+   * Continue the layer below this row of its frame (0 = top, 1 = bottom) by
+   * repeating that row downward. For a popped-out layer whose painting is cut
+   * off where it meets a wall layer drawn after it (e.g. a figure standing in
+   * the water): seen from off-axis, the pop-out lifts the cut edge off the
+   * water, and the continuation fills that gap instead of showing the wall.
+   * Default: off.
+   */
+  extendBelow?: number;
 }
 
 /** How layers blend into the physical wall. */
