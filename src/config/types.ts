@@ -111,6 +111,14 @@ export interface LayerConfig {
   fit?: [[number, number, number], [number, number, number]];
 
   /**
+   * Enlarge the layer around `growAnchor` (x, y in frame widths/heights from the
+   * top-left), e.g. 1.03 = 3% bigger, so it fully covers the painted figure
+   * underneath. `?grow=<n>` overrides it for on-site tuning. Default: 1.
+   */
+  grow?: number;
+  growAnchor?: [number, number];
+
+  /**
    * Continue the layer below this row of its frame (0 = top, 1 = bottom) by
    * repeating that row downward. For a popped-out layer whose painting is cut
    * off where it meets a wall layer drawn after it (e.g. a figure standing in

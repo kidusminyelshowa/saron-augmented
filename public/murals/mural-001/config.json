@@ -37,6 +37,8 @@
       "loop": true,
       "packing": "color-alpha-depth",
       "relief": 0,
+      "grow": 1.03,
+      "growAnchor": [0.57, 0.71],
       "extendBelow": 0.71
     },
     {
